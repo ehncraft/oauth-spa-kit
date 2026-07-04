@@ -165,27 +165,26 @@ the BFF pattern there's no need for it: renewal is a same-origin
 ## Status
 
 Not yet published, but the full pipeline has actually been run, not just
-eyeballed: `pnpm install`, `pnpm build`/`typecheck` (`core`, `server`,
-`react`, plus `nuxt` via its real build tool, `nuxt-module-build`), and
-`pnpm test` -- **78 passing tests** across both packages (PKCE against the
-RFC 7636 test vector, JWT sign/verify for both algorithms, DPoP proof
-structure + nonce retry + key export/import round-trips, PAR, client
-assertions, and a full login -> PAR -> callback -> JWKS-verified session ->
-refresh -> logout integration suite against a mocked authorization server
-in `packages/server/test/handlers.test.ts`).
+eyeballed: `pnpm install`, `pnpm build`/`typecheck` across all 4 packages
+(`nuxt` via its real build tool, `nuxt-module-build`), and `pnpm test` --
+**78 passing tests** across `core` and `server` (PKCE against the RFC 7636
+test vector, JWT sign/verify for both algorithms, DPoP proof structure +
+nonce retry + key export/import round-trips, PAR, client assertions, and a
+full login -> PAR -> callback -> JWKS-verified session -> refresh -> logout
+integration suite against a mocked authorization server in
+`packages/server/test/handlers.test.ts`).
 
-One known, deliberate gap: `nuxt/src/runtime/**` shows `Cannot find module
-'#imports'` under a plain `tsc --noEmit` (excluded from `pnpm typecheck`
-for this reason). `#imports` is a virtual module Nuxt only generates by
-running `nuxi prepare` inside a real Nuxt app -- checked this against the
-actual `nuxt-auth-utils` source, whose own `tsconfig.json` excludes
-`src/runtime`/`playground` from direct compilation for the same reason,
-resolving types only through a `playground/` app's generated
-`.nuxt/tsconfig.*.json`. `nuxt-module-build build` (the module's real build
-tool, which stubs Nuxt's auto-imports itself) succeeds regardless, and is
-what CI gates on for this package.
+`packages/nuxt/playground/` is a minimal Nuxt app (static discovery
+document and an ephemeral key pair, so `nuxi dev`/`prepare` never need
+network access) that exists for one reason: `nuxi prepare playground`
+generates `playground/.nuxt/tsconfig*.json`, which the `nuxt` package's own
+`tsconfig.json` references instead of compiling `src/` directly -- the same
+pattern `nuxt-auth-utils` itself uses, since `#imports` is a virtual module
+Nuxt only generates inside a real app. With that in place `pnpm typecheck`
+now covers `nuxt/src/runtime/**` too, `#imports` and all -- run
+`pnpm --filter=@oauth-spa-kit/nuxt run dev:prepare` once after cloning (CI
+does this automatically before typechecking).
 
-Next steps: a `playground/` app for the `nuxt` package (would close the gap
-above the same way upstream does), and a real deployment target for
-`examples/react-spa`'s server half (currently written against any Web-
-standard-`Request` runtime, untested against a specific one).
+Next step: a real deployment target for `examples/react-spa`'s server half
+(currently written against any Web-standard-`Request` runtime, untested
+against a specific one).

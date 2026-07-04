@@ -1,9 +1,8 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src"
-  },
-  "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../server" }]
+  "files": [],
+  "references": [
+    { "path": "./playground/.nuxt/tsconfig.json" },
+    { "path": "./playground/.nuxt/tsconfig.server.json" }
+  ],
+  "exclude": ["dist", "node_modules", "playground", "test"]
 }

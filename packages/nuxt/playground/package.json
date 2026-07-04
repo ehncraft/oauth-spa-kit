@@ -1,0 +1,11 @@
+{
+  "name": "@oauth-spa-kit/nuxt-playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxi dev",
+    "build": "nuxi build",
+    "generate": "nuxi generate",
+    "preview": "nuxi preview"
+  }
+}
