@@ -1,0 +1,26 @@
+{
+  "name": "@oauth-spa-kit/nuxt",
+  "version": "0.1.0",
+  "description": "Nuxt module wiring @oauth-spa-kit/server's handlers as Nitro server routes, plus a useAuth() composable over @oauth-spa-kit/core's session client.",
+  "type": "module",
+  "main": "./dist/module.mjs",
+  "types": "./dist/types.d.ts",
+  "scripts": {
+    "build": "nuxt-module-build build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@oauth-spa-kit/core": "workspace:*",
+    "@oauth-spa-kit/server": "workspace:*",
+    "@nuxt/kit": "^3.14.0",
+    "defu": "^6.1.0",
+    "h3": "^1.13.0"
+  },
+  "devDependencies": {
+    "@nuxt/module-builder": "^0.8.0",
+    "@nuxt/schema": "^3.14.0",
+    "nuxt": "^3.14.0",
+    "vue": "^3.5.0",
+    "typescript": "^5.6.0"
+  }
+}

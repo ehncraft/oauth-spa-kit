@@ -1,0 +1,21 @@
+{
+  "name": "@oauth-spa-kit/server",
+  "version": "0.1.0",
+  "description": "BFF-pattern OAuth handlers: sealed HttpOnly-cookie sessions + login/callback/refresh/logout route factories, built on Web-standard Request/Response so they drop into Nitro, Next.js route handlers, Cloudflare Workers, or plain Node (via a small adapter).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@oauth-spa-kit/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}
