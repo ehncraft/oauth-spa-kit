@@ -1,3 +1,4 @@
+import type { SerializedDpopKeyPair } from "@oauth-spa-kit/core";
 import { sealJson, unsealJson } from "./crypto";
 import { parseCookies, serializeCookie, expireCookie } from "./cookies";
 
@@ -12,6 +13,15 @@ export interface PkceState {
   state: string;
   nonce: string;
   returnTo: string;
+  /**
+   * Generated at login time (not callback time) so its thumbprint can be
+   * sent as `dpop_jkt` in the (pushed) authorization request, binding the
+   * authorization code itself to this key -- RFC 9449 section 10. The same
+   * key pair is then reused for the token exchange and carried into the
+   * session for every subsequent refresh (a DPoP-bound refresh token must
+   * be renewed with the key that obtained it).
+   */
+  dpopKeyPair?: SerializedDpopKeyPair;
 }
 
 const COOKIE_NAME = "__oauth_pkce";

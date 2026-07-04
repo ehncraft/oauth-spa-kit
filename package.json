@@ -2,14 +2,26 @@
   "name": "oauth-spa-kit",
   "private": true,
   "description": "Framework-agnostic OAuth 2.1 / OIDC client for JS SPAs, with thin adapters for React, Vue and Nuxt.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ehncraft/oauth-spa-kit.git"
+  },
+  "homepage": "https://github.com/ehncraft/oauth-spa-kit#readme",
+  "bugs": "https://github.com/ehncraft/oauth-spa-kit/issues",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "pnpm -r --filter=./packages/* build",
-    "typecheck": "pnpm -r --filter=./packages/* typecheck",
-    "lint": "pnpm -r --filter=./packages/* lint"
+    "typecheck": "pnpm -r --filter=./packages/core --filter=./packages/server --filter=./packages/react typecheck",
+    "lint": "pnpm -r --filter=./packages/* lint",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   },
   "packageManager": "pnpm@9.12.0"
 }

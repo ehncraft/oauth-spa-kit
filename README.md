@@ -1,7 +1,10 @@
 # oauth-spa-kit
 
 Framework-agnostic OAuth 2.1 / OIDC for JS SPAs -- one core, thin adapters
-for React, Vue/Nuxt, or anything else that can call `fetch`.
+for React, Vue/Nuxt, or anything else that can call `fetch`. Built to the
+[FAPI 2.0 Security Profile](https://openid.net/specs/fapi-2_0-security-profile.html)
+baseline (PAR, PKCE, DPoP, `private_key_jwt` -- no shared secrets) using
+only FIPS 140-approved algorithms.
 
 ## Why this shape
 
@@ -21,8 +24,7 @@ different half:
 
 Neither is reused wholesale: `oidc-client-ts` is browser-only and assumes
 tokens live in the SPA; `nuxt-auth-utils` is Nuxt/Nitro-only and has no
-OAuth *token* refresh at all (only session-cookie CRUD -- see the
-conversation this repo came out of for specifics).
+OAuth *token* refresh at all (only session-cookie CRUD).
 
 ## Why BFF-only, not a pluggable token store
 
@@ -41,14 +43,38 @@ with a pluggable in-memory mode, because a dual-mode design tends to make
 the insecure option one config flag away, and the whole point is to make
 the secure default the only path.
 
+## Why no client_secret
+
+This kit supports exactly one client authentication method:
+[`private_key_jwt`](https://www.rfc-editor.org/rfc/rfc7523) (RFC 7523). A
+shared `client_secret` is never accepted, in either the core token-exchange
+functions or the config types -- there's no flag to turn it on. Two
+independent reasons converge on the same answer:
+
+- **FAPI 2.0** requires either `private_key_jwt` or mTLS for confidential
+  client authentication; shared secrets aren't in the baseline profile.
+- **FIPS 140** compliance is about approved algorithms, not really about
+  secrets vs. keys, but a `client_secret` is a long-lived bearer credential
+  that has to be generated, stored, and rotated as a shared value -- an
+  asymmetric keypair replaces that with a private key that never leaves
+  this server and a public key registered once with the AS.
+
+All signing in this kit (client assertions, DPoP proofs) uses **PS256
+(RSA-PSS) or ES256 (ECDSA P-256) only** -- see the comment on `JwtAlgorithm`
+in `packages/core/src/jwt.ts`. RS256 is deliberately excluded: FAPI 2.0
+requires PS256 or ES256 for asymmetric signing (RS256's PKCS#1 v1.5 padding
+is legacy), and both remaining algorithms are FIPS 140-approved (FIPS
+186-4/186-5) given approved parameters (RSA >=2048-bit, P-256).
+
 ## Layout
 
 ```
 packages/
-  core/     Pure OAuth/OIDC primitives -- PKCE, discovery, token exchange,
-            DPoP proof generation, plus the browser-side session client.
-            Zero DOM/Node-only APIs (only Web Crypto + fetch), so this same
-            code runs in the browser AND inside the server package below.
+  core/     Pure OAuth/OIDC primitives -- PKCE, discovery, JWT sign/verify,
+            DPoP proofs, private_key_jwt assertions, PAR, token exchange --
+            plus the browser-side session client. Zero DOM/Node-only APIs
+            (only Web Crypto + fetch), so this same code runs in the
+            browser AND inside the server package below.
   server/   BFF: sealed-cookie session + createLoginHandler /
             createCallbackHandler / createSessionHandler /
             createLogoutHandler / getAuthorizationHeader. Handlers are
@@ -71,19 +97,32 @@ you're not inside Nitro.
 
 ## Request flow
 
-1. `GET /auth/login[?returnTo=/foo]` -- generates PKCE verifier/challenge +
-   `state`/`nonce`, stores them in a **separate**, 5-minute, signed cookie
-   (not server memory -- keeps the BFF stateless across instances),
-   redirects to the IdP's `authorization_endpoint`.
+1. `GET /auth/login[?returnTo=/foo]` -- generates PKCE verifier/challenge,
+   `state`/`nonce`, and (unless `dpop: false`) a DPoP key pair whose JWK
+   thumbprint is sent as `dpop_jkt` (RFC 9449 section 10), binding the
+   authorization code itself to that key before any token exists. Unless
+   `par: false`, these are **pushed** to the AS's PAR endpoint (RFC 9126)
+   rather than placed on the `/authorize` query string, so none of it sits
+   in browser history or the `Referer` header; the browser redirect then
+   only carries `client_id` + the resulting single-use `request_uri`. All
+   of this -- verifier, state, nonce, the DPoP key pair -- is stored in a
+   **separate**, 5-minute, signed cookie (not server memory, so the BFF
+   stays stateless across instances).
 2. `GET /auth/callback?code=...&state=...` -- verifies `state`, exchanges
-   `code` for tokens (`authorization_code` grant, PKCE-verified), seals
-   `{ tokens, user }` into the session cookie, redirects to `returnTo`.
+   `code` for tokens using the *same* DPoP key from step 1
+   (`authorization_code` grant, PKCE-verified, `private_key_jwt`-
+   authenticated), verifies the `id_token`'s signature against the AS's
+   JWKS and its `iss`/`aud`/`nonce`/`exp` claims (OIDC Core section
+   3.1.3.7) before trusting anything in it, seals `{ tokens, user,
+   dpopKeyPair }` into the session cookie, redirects to `returnTo`.
 3. `GET /auth/session` -- returns `{ user }` (never tokens). If the access
    token is within `refreshThresholdSeconds` (default 60s, same default
    `oidc-client-ts` uses) of expiry, refreshes server-side first via the
-   `refresh_token` grant and re-seals the cookie. If refresh fails (token
-   revoked, rotated-and-reused, IdP down), returns 401 and clears the
-   cookie -- no silently-stale "authenticated" state.
+   `refresh_token` grant -- reusing the same DPoP key the tokens were bound
+   to, since a DPoP-bound refresh token must be renewed with the key that
+   obtained it -- and re-seals the cookie. If refresh fails (token revoked,
+   rotated-and-reused, IdP down), returns 401 and clears the cookie -- no
+   silently-stale "authenticated" state.
 4. `POST /auth/logout` -- clears the cookie, optionally redirects through
    the IdP's `end_session_endpoint` (RP-Initiated Logout) if configured.
 5. App API routes that need to call an upstream resource server call
@@ -100,46 +139,53 @@ the BFF pattern there's no need for it: renewal is a same-origin
 
 - **PKCE always**, no exceptions -- OAuth 2.1 makes it mandatory for every
   authorization-code client, not just public ones.
+- **PAR by default** (RFC 9126, `par: true` unless explicitly disabled) --
+  required by FAPI 2.0; keeps every authorization request parameter off
+  the browser-visible URL.
+- **`private_key_jwt` only, no `client_secret`** -- see "Why no
+  client_secret" above.
+- **DPoP by default** (RFC 9449, `dpop: true` unless explicitly disabled)
+  -- sender-constrains tokens to a key pair generated server-side, bound to
+  the authorization code via `dpop_jkt` at request time, reused for every
+  subsequent refresh, and retried transparently against a
+  `use_dpop_nonce` challenge (RFC 9449 section 8). Pairs with a
+  resource-server-side verifier like this workspace's own
+  `apisix/custom-plugins/apisix/plugins/dpop-verify.lua`.
 - **Refresh token rotation expected**: `exchangeRefreshToken` carries the
   old refresh token forward only if the server omits a new one; if your
   IdP rotates and detects reuse of an old token, that's a signal of theft
   -- the session handler treats any refresh failure as "log the user out",
   not "retry with the stale token".
-- **DPoP (RFC 9449) as an opt-in** (`oauth.dpop: true`) -- sender-constrains
-  tokens to a non-extractable key pair, so a leaked token is useless
-  without the private key. Pairs with a resource-server-side verifier like
-  this workspace's own
-  `apisix/custom-plugins/apisix/plugins/dpop-verify.lua`.
-- **No id_token trust without verification** -- the callback handler
-  decodes `id_token` claims for convenience but the code comments flag
-  that production needs signature verification against `jwks_uri` before
-  trusting them; that's intentionally left as a follow-up rather than
-  faked with a fake sense of security.
+- **`id_token` signature verified against the AS's JWKS** before any claim
+  in it is trusted (issuer, audience, nonce, expiry all checked too) --
+  see `verifyIdToken` in `packages/server/src/handlers.ts`.
 - **Cross-tab logout sync via `BroadcastChannel`**, not the
   `localStorage` key-and-storage-event trick.
 
 ## Status
 
-Design sketch, not a published package -- but `pnpm install` plus
-`build`/`typecheck` per package have actually been run against it, not just
-eyeballed:
+Not yet published, but the full pipeline has actually been run, not just
+eyeballed: `pnpm install`, `pnpm build`/`typecheck` (`core`, `server`,
+`react`, plus `nuxt` via its real build tool, `nuxt-module-build`), and
+`pnpm test` -- **78 passing tests** across both packages (PKCE against the
+RFC 7636 test vector, JWT sign/verify for both algorithms, DPoP proof
+structure + nonce retry + key export/import round-trips, PAR, client
+assertions, and a full login -> PAR -> callback -> JWKS-verified session ->
+refresh -> logout integration suite against a mocked authorization server
+in `packages/server/test/handlers.test.ts`).
 
-- `core`, `server`, `react`, and `nuxt`'s own files (module.ts, server
-  routes, composable) all typecheck clean.
-- `nuxt`'s runtime files (`src/runtime/**`) show `Cannot find module
-  '#imports'` under a plain `tsc --noEmit` -- this is expected, not a bug:
-  `#imports` is a virtual module Nuxt only generates by running `nuxi
-  prepare` inside a real Nuxt app. Checked this against the actual
-  `nuxt-auth-utils` source: its own `tsconfig.json` excludes
-  `src/runtime`/`playground` from direct compilation for the same reason,
-  resolving types only through a `playground/` app's generated
-  `.nuxt/tsconfig.*.json`. Wiring up an equivalent `playground/` here would
-  close this gap the same way upstream does.
+One known, deliberate gap: `nuxt/src/runtime/**` shows `Cannot find module
+'#imports'` under a plain `tsc --noEmit` (excluded from `pnpm typecheck`
+for this reason). `#imports` is a virtual module Nuxt only generates by
+running `nuxi prepare` inside a real Nuxt app -- checked this against the
+actual `nuxt-auth-utils` source, whose own `tsconfig.json` excludes
+`src/runtime`/`playground` from direct compilation for the same reason,
+resolving types only through a `playground/` app's generated
+`.nuxt/tsconfig.*.json`. `nuxt-module-build build` (the module's real build
+tool, which stubs Nuxt's auto-imports itself) succeeds regardless, and is
+what CI gates on for this package.
 
-Next steps before this is usable: add `jose`-based `id_token` signature
-verification (currently decoded but not verified -- flagged inline in
-`handlers.ts`), a Vitest suite per package (token exchange against a mock
-IdP, cookie seal/unseal round trips), the `nuxt` package's `playground/`
-app mentioned above, and pick a real deployment target for
-`examples/react-spa`'s server half (the sketch assumes any Web-standard-
-`Request` runtime).
+Next steps: a `playground/` app for the `nuxt` package (would close the gap
+above the same way upstream does), and a real deployment target for
+`examples/react-spa`'s server half (currently written against any Web-
+standard-`Request` runtime, untested against a specific one).

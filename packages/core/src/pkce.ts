@@ -8,11 +8,7 @@
  * never treated as optional.
  */
 
-function base64UrlEncode(bytes: Uint8Array): string {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+import { base64UrlEncode } from "./base64url";
 
 function randomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);

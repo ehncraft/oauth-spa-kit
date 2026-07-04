@@ -2,9 +2,19 @@
   "name": "@oauth-spa-kit/nuxt",
   "version": "0.1.0",
   "description": "Nuxt module wiring @oauth-spa-kit/server's handlers as Nitro server routes, plus a useAuth() composable over @oauth-spa-kit/core's session client.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ehncraft/oauth-spa-kit.git",
+    "directory": "packages/nuxt"
+  },
   "type": "module",
   "main": "./dist/module.mjs",
   "types": "./dist/types.d.ts",
+  "files": ["dist"],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "nuxt-module-build build",
     "typecheck": "tsc -p tsconfig.json --noEmit"

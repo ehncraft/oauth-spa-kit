@@ -1,10 +1,12 @@
-import type { AuthenticatedUser, TokenSet } from "@oauth-spa-kit/core";
+import type { AuthenticatedUser, SerializedDpopKeyPair, TokenSet } from "@oauth-spa-kit/core";
 import { sealJson, unsealJson } from "./crypto";
 import { parseCookies, serializeCookie, expireCookie } from "./cookies";
 
 export interface StoredSession {
   tokens: TokenSet;
   user: AuthenticatedUser;
+  /** The exact key pair the tokens are DPoP-bound to -- reused for every refresh. Absent only if `config.oauth.dpop === false`. */
+  dpopKeyPair?: SerializedDpopKeyPair;
 }
 
 export interface SessionConfig {

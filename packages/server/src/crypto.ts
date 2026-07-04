@@ -12,7 +12,11 @@ function base64UrlEncode(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function base64UrlDecode(value: string): Uint8Array {
+// Concrete `Uint8Array<ArrayBuffer>`, not the bare `Uint8Array` (TS's dom
+// lib parameterizes that over `ArrayBufferLike` including
+// `SharedArrayBuffer`) -- `crypto.subtle.decrypt` requires an actual
+// `ArrayBuffer`-backed view.
+function base64UrlDecode(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
   const binary = atob(padded);
   const bytes = new Uint8Array(binary.length);

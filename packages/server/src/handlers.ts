@@ -1,11 +1,19 @@
 import {
+  computeJwkThumbprint,
   createPkceParams,
   discoverOidcConfiguration,
   exchangeAuthorizationCode,
   exchangeRefreshToken,
+  exportDpopKeyPair,
+  fetchJwks,
   generateDpopKeyPair,
+  importDpopKeyPair,
+  pushAuthorizationRequest,
+  verifyJwt,
+  OAuthError,
   type AuthenticatedUser,
   type OAuthClientConfig,
+  type OidcDiscoveryDocument,
 } from "@oauth-spa-kit/core";
 import { clearPkceStateHeader, readPkceState, writePkceStateHeader } from "./pkceState";
 import { clearSessionHeader, readSession, writeSessionHeader, type SessionConfig } from "./session";
@@ -25,21 +33,30 @@ export interface OAuthHandlersConfig {
   fetchImpl?: typeof fetch;
 }
 
-function decodeIdTokenClaims(idToken?: string): AuthenticatedUser | null {
-  if (!idToken) return null;
-  const payload = idToken.split(".")[1];
-  if (!payload) return null;
-  try {
-    const padded = payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=");
-    return JSON.parse(atob(padded)) as AuthenticatedUser;
-  } catch {
-    return null;
-  }
-}
-
-async function resolveDiscovery(config: OAuthHandlersConfig) {
+async function resolveDiscovery(config: OAuthHandlersConfig): Promise<OidcDiscoveryDocument> {
   return config.oauth.discoveryDocument
     ?? discoverOidcConfiguration(config.oauth.authority, config.fetchImpl);
+}
+
+/** OIDC Core section 3.1.3.7 -- verify the id_token's signature and standard claims via the AS's JWKS before trusting anything in it. */
+async function verifyIdToken(
+  idToken: string | undefined,
+  discovery: OidcDiscoveryDocument,
+  config: OAuthHandlersConfig,
+  expectedNonce: string,
+): Promise<AuthenticatedUser> {
+  if (!idToken) throw new OAuthError("Token response did not include an id_token");
+  if (!discovery.jwks_uri) throw new OAuthError("Discovery document has no jwks_uri -- cannot verify id_token");
+
+  const jwks = await fetchJwks(discovery.jwks_uri, config.fetchImpl);
+  const { payload } = await verifyJwt({
+    token: idToken,
+    jwks,
+    expectedIssuer: discovery.issuer,
+    expectedAudience: config.oauth.clientId,
+    expectedNonce,
+  });
+  return payload as AuthenticatedUser;
 }
 
 export function createLoginHandler(config: OAuthHandlersConfig) {
@@ -48,21 +65,61 @@ export function createLoginHandler(config: OAuthHandlersConfig) {
     const pkce = await createPkceParams();
     const returnTo = new URL(request.url).searchParams.get("returnTo") ?? config.defaultReturnTo ?? "/";
 
+    // Generated here, not at the callback -- FAPI 2.0's `dpop_jkt` binds the
+    // authorization code itself to this key before any token exists, so
+    // the same key has to exist before the (pushed) authorization request
+    // goes out, and gets carried through the PKCE cookie to the callback.
+    const dpopEnabled = config.oauth.dpop !== false;
+    const dpopKeyPair = dpopEnabled ? await generateDpopKeyPair() : undefined;
+
+    const authParams: Record<string, string> = {
+      response_type: "code",
+      redirect_uri: config.oauth.redirectUri,
+      scope: config.oauth.scope,
+      state: pkce.state,
+      nonce: pkce.nonce,
+      code_challenge: pkce.codeChallenge,
+      code_challenge_method: pkce.codeChallengeMethod,
+      ...(config.oauth.extraAuthorizationParams ?? {}),
+    };
+    if (dpopKeyPair) {
+      authParams.dpop_jkt = await computeJwkThumbprint(dpopKeyPair.publicKey);
+    }
+
+    const parEnabled = config.oauth.par !== false;
     const authorizeUrl = new URL(discovery.authorization_endpoint);
-    authorizeUrl.searchParams.set("response_type", "code");
     authorizeUrl.searchParams.set("client_id", config.oauth.clientId);
-    authorizeUrl.searchParams.set("redirect_uri", config.oauth.redirectUri);
-    authorizeUrl.searchParams.set("scope", config.oauth.scope);
-    authorizeUrl.searchParams.set("state", pkce.state);
-    authorizeUrl.searchParams.set("nonce", pkce.nonce);
-    authorizeUrl.searchParams.set("code_challenge", pkce.codeChallenge);
-    authorizeUrl.searchParams.set("code_challenge_method", pkce.codeChallengeMethod);
-    for (const [key, value] of Object.entries(config.oauth.extraAuthorizationParams ?? {})) {
-      authorizeUrl.searchParams.set(key, value);
+
+    if (parEnabled) {
+      if (!discovery.pushed_authorization_request_endpoint) {
+        throw new OAuthError(
+          "par is enabled (the default) but the discovery document has no pushed_authorization_request_endpoint -- "
+          + "set oauth.par = false to fall back to a plain /authorize redirect if your AS doesn't support PAR.",
+        );
+      }
+      const pushed = await pushAuthorizationRequest({
+        parEndpoint: discovery.pushed_authorization_request_endpoint,
+        clientId: config.oauth.clientId,
+        clientAuthentication: config.oauth.clientAuthentication,
+        assertionAudience: discovery.pushed_authorization_request_endpoint,
+        params: authParams,
+        fetchImpl: config.fetchImpl,
+      });
+      authorizeUrl.searchParams.set("request_uri", pushed.request_uri);
+    } else {
+      for (const [key, value] of Object.entries(authParams)) {
+        authorizeUrl.searchParams.set(key, value);
+      }
     }
 
     const setCookie = await writePkceStateHeader(
-      { codeVerifier: pkce.codeVerifier, state: pkce.state, nonce: pkce.nonce, returnTo },
+      {
+        codeVerifier: pkce.codeVerifier,
+        state: pkce.state,
+        nonce: pkce.nonce,
+        returnTo,
+        dpopKeyPair: dpopKeyPair ? await exportDpopKeyPair(dpopKeyPair) : undefined,
+      },
       config.session.password,
     );
 
@@ -87,27 +144,38 @@ export function createCallbackHandler(config: OAuthHandlersConfig) {
     }
 
     const discovery = await resolveDiscovery(config);
-    const dpopKeyPair = config.oauth.dpop ? await generateDpopKeyPair() : undefined;
+    const dpopKeyPair = pkce.dpopKeyPair ? await importDpopKeyPair(pkce.dpopKeyPair) : undefined;
 
-    const tokens = await exchangeAuthorizationCode({
-      config: config.oauth,
-      tokenEndpoint: discovery.token_endpoint,
-      code,
-      codeVerifier: pkce.codeVerifier,
-      dpopKeyPair,
-      fetchImpl: config.fetchImpl,
-    });
+    // Token exchange and id_token verification talk to the IdP and to
+    // untrusted-until-verified JWT parsing -- both are expected to fail
+    // sometimes (a replayed/expired code, a misconfigured JWKS). Catch here
+    // so the caller always gets back a Response, never an uncaught
+    // rejection a raw Web-standard fetch handler has no way to turn into
+    // one itself.
+    try {
+      const tokens = await exchangeAuthorizationCode({
+        config: config.oauth,
+        tokenEndpoint: discovery.token_endpoint,
+        code,
+        codeVerifier: pkce.codeVerifier,
+        dpopKeyPair,
+        fetchImpl: config.fetchImpl,
+      });
 
-    // NOTE: sketch-grade only -- verify the id_token signature (and `nonce`
-    // claim against pkce.nonce) using discovery.jwks_uri before trusting
-    // these claims in production.
-    const user = decodeIdTokenClaims(tokens.idToken) ?? { sub: "unknown" };
+      const user = await verifyIdToken(tokens.idToken, discovery, config, pkce.nonce);
 
-    const headers = new Headers({ Location: pkce.returnTo });
-    headers.append("Set-Cookie", await writeSessionHeader({ tokens, user }, config.session));
-    headers.append("Set-Cookie", clearPkceStateHeader());
+      const headers = new Headers({ Location: pkce.returnTo });
+      headers.append(
+        "Set-Cookie",
+        await writeSessionHeader({ tokens, user, dpopKeyPair: pkce.dpopKeyPair }, config.session),
+      );
+      headers.append("Set-Cookie", clearPkceStateHeader());
 
-    return new Response(null, { status: 302, headers });
+      return new Response(null, { status: 302, headers });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Unknown error";
+      return new Response(`Login failed: ${message}`, { status: 400, headers: { "Set-Cookie": clearPkceStateHeader() } });
+    }
   };
 }
 
@@ -141,10 +209,12 @@ export function createSessionHandler(config: OAuthHandlersConfig) {
 
     try {
       const discovery = await resolveDiscovery(config);
+      const dpopKeyPair = session.dpopKeyPair ? await importDpopKeyPair(session.dpopKeyPair) : undefined;
       session.tokens = await exchangeRefreshToken({
         config: config.oauth,
         tokenEndpoint: discovery.token_endpoint,
         refreshToken: session.tokens.refreshToken,
+        dpopKeyPair,
         fetchImpl: config.fetchImpl,
       });
       const setCookie = await writeSessionHeader(session, config.session);
@@ -209,10 +279,12 @@ export async function getAuthorizationHeader(
 
   if (expiringSoon && session.tokens.refreshToken) {
     const discovery = await resolveDiscovery(config);
+    const dpopKeyPair = session.dpopKeyPair ? await importDpopKeyPair(session.dpopKeyPair) : undefined;
     session.tokens = await exchangeRefreshToken({
       config: config.oauth,
       tokenEndpoint: discovery.token_endpoint,
       refreshToken: session.tokens.refreshToken,
+      dpopKeyPair,
       fetchImpl: config.fetchImpl,
     });
     const setCookie = await writeSessionHeader(session, config.session);

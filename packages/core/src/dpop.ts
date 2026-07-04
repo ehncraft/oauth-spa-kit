@@ -1,12 +1,24 @@
+import { base64UrlEncode } from "./base64url";
+import { signJwt } from "./jwt";
 import { generateRandomString } from "./pkce";
 
 /**
- * DPoP (RFC 9449) -- sender-constrained tokens. Optional but recommended:
- * without it, a leaked access/refresh token (XSS, log leakage, a
- * misconfigured proxy) is a bearer credential anyone can replay. With DPoP,
- * every token request/use is bound to a private key that never leaves this
- * process and is generated non-extractable, so it can't be exfiltrated even
- * by a full JS-execution XSS.
+ * DPoP (RFC 9449) -- sender-constrained tokens. Required by default in this
+ * kit (FAPI 2.0 requires DPoP or mTLS for confidential clients; DPoP is the
+ * one that doesn't need a client-certificate PKI). Every token request/use
+ * is bound to a private key.
+ *
+ * Keys are generated **extractable**: in the original in-browser design for
+ * this kit, non-extractable was the point (an XSS payload executing as the
+ * page couldn't exfiltrate the key even with full JS execution). Once
+ * everything moved server-side for the BFF pattern, key generation happens
+ * in this process, not in a browser tab an attacker's script can run in --
+ * the actual risk here is a compromised session store, which encrypting the
+ * exported key at rest (via the same AES-256-GCM sealing already used for
+ * the session cookie) already covers. Extractability is required in
+ * practice anyway: a DPoP-bound refresh token must be renewed with the
+ * *same* key that obtained it, and a `CryptoKey` object cannot itself
+ * survive across stateless HTTP requests -- only its exported JWK can.
  *
  * This mirrors the server-side verification already done by
  * apisix/custom-plugins/apisix/plugins/dpop-verify.lua in this workspace's
@@ -21,23 +33,52 @@ export interface DpopKeyPair {
 export async function generateDpopKeyPair(): Promise<DpopKeyPair> {
   const { publicKey, privateKey } = await globalThis.crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
-    /* extractable */ false,
+    /* extractable */ true,
     ["sign", "verify"],
   );
   return { publicKey, privateKey };
 }
 
-function base64UrlEncode(bytes: ArrayBuffer | Uint8Array): string {
-  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  let binary = "";
-  for (const b of arr) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+export interface SerializedDpopKeyPair {
+  privateJwk: JsonWebKey;
+  publicJwk: JsonWebKey;
 }
 
-async function publicJwk(publicKey: CryptoKey): Promise<JsonWebKey> {
-  const jwk = await globalThis.crypto.subtle.exportKey("jwk", publicKey);
-  // Only the fields the RFC actually requires in the `jwk` header go out.
+/** For persisting a key pair across requests (PKCE cookie during the redirect, session cookie thereafter) -- see the module comment for why extractability is unavoidable here. */
+export async function exportDpopKeyPair(keyPair: DpopKeyPair): Promise<SerializedDpopKeyPair> {
+  const [privateJwk, publicJwk] = await Promise.all([
+    globalThis.crypto.subtle.exportKey("jwk", keyPair.privateKey),
+    globalThis.crypto.subtle.exportKey("jwk", keyPair.publicKey),
+  ]);
+  return { privateJwk, publicJwk };
+}
+
+export async function importDpopKeyPair(serialized: SerializedDpopKeyPair): Promise<DpopKeyPair> {
+  const params: EcKeyImportParams = { name: "ECDSA", namedCurve: "P-256" };
+  const [privateKey, publicKey] = await Promise.all([
+    globalThis.crypto.subtle.importKey("jwk", serialized.privateJwk, params, true, ["sign"]),
+    globalThis.crypto.subtle.importKey("jwk", serialized.publicJwk, params, true, ["verify"]),
+  ]);
+  return { privateKey, publicKey };
+}
+
+function publicJwkClaims(jwk: JsonWebKey): JsonWebKey {
+  // Only the fields the RFC actually requires in a DPoP proof's `jwk` header.
   return { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y };
+}
+
+/**
+ * RFC 7638 JWK SHA-256 thumbprint, used as the `dpop_jkt` authorization
+ * request parameter (RFC 9449 section 10) -- binds the authorization code
+ * itself to this DPoP key, before any token is even issued, so a stolen
+ * code can't be redeemed with a different key pair.
+ */
+export async function computeJwkThumbprint(publicKey: CryptoKey): Promise<string> {
+  const jwk = publicJwkClaims(await globalThis.crypto.subtle.exportKey("jwk", publicKey));
+  // RFC 7638 section 3: lexicographic member order, no insignificant whitespace.
+  const canonical = `{"crv":"${jwk.crv}","kty":"${jwk.kty}","x":"${jwk.x}","y":"${jwk.y}"}`;
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+  return base64UrlEncode(new Uint8Array(digest));
 }
 
 export interface CreateDpopProofArgs {
@@ -57,11 +98,6 @@ export async function createDpopProof({
   accessToken,
   nonce,
 }: CreateDpopProofArgs): Promise<string> {
-  const header = {
-    typ: "dpop+jwt",
-    alg: "ES256",
-    jwk: await publicJwk(keyPair.publicKey),
-  };
   const payload: Record<string, unknown> = {
     jti: generateRandomString(16),
     htm,
@@ -74,18 +110,14 @@ export async function createDpopProof({
       "SHA-256",
       new TextEncoder().encode(accessToken),
     );
-    payload.ath = base64UrlEncode(digest);
+    payload.ath = base64UrlEncode(new Uint8Array(digest));
   }
 
-  const encodedHeader = base64UrlEncode(new TextEncoder().encode(JSON.stringify(header)));
-  const encodedPayload = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-
-  const signature = await globalThis.crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    keyPair.privateKey,
-    new TextEncoder().encode(signingInput),
-  );
-
-  return `${signingInput}.${base64UrlEncode(signature)}`;
+  const publicJwk = publicJwkClaims(await globalThis.crypto.subtle.exportKey("jwk", keyPair.publicKey));
+  return signJwt({
+    header: { typ: "dpop+jwt", jwk: publicJwk },
+    payload,
+    privateKey: keyPair.privateKey,
+    alg: "ES256",
+  });
 }

@@ -2,20 +2,33 @@
   "name": "@oauth-spa-kit/server",
   "version": "0.1.0",
   "description": "BFF-pattern OAuth handlers: sealed HttpOnly-cookie sessions + login/callback/refresh/logout route factories, built on Web-standard Request/Response so they drop into Nitro, Next.js route handlers, Cloudflare Workers, or plain Node (via a small adapter).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ehncraft/oauth-spa-kit.git",
+    "directory": "packages/server"
+  },
+  "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
   },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --root ../.. packages/server/test"
   },
   "dependencies": {
     "@oauth-spa-kit/core": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   }
 }

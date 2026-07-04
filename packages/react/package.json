@@ -2,11 +2,22 @@
   "name": "@oauth-spa-kit/react",
   "version": "0.1.0",
   "description": "React bindings for @oauth-spa-kit/core's session client -- an AuthProvider + useAuth() hook, same shape as nuxt-auth-utils' useUserSession composable.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ehncraft/oauth-spa-kit.git",
+    "directory": "packages/react"
+  },
+  "sideEffects": false,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=18"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
