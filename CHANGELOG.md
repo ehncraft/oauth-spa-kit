@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/ehncraft/oauth-spa-kit/compare/v1.0.0...v1.0.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* preserve package.json formatting in the version-bump script ([c8d7762](https://github.com/ehncraft/oauth-spa-kit/commit/c8d77628d6683982ef336645766ad70732710be9))
+
 # 1.0.0 (2026-07-10)
 
 
