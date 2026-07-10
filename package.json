@@ -17,7 +17,8 @@
     "build": "pnpm -r --filter=./packages/* build",
     "typecheck": "pnpm -r --filter=./packages/* typecheck",
     "lint": "pnpm -r --filter=./packages/* lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "publish:packages": "pnpm -r --filter=./packages/* publish --access public --provenance --no-git-checks"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

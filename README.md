@@ -176,14 +176,33 @@ integration suite against a mocked authorization server in
 
 `packages/nuxt/playground/` is a minimal Nuxt app (static discovery
 document and an ephemeral key pair, so `nuxi dev`/`prepare` never need
-network access) that exists for one reason: `nuxi prepare playground`
-generates `playground/.nuxt/tsconfig*.json`, which the `nuxt` package's own
-`tsconfig.json` references instead of compiling `src/` directly -- the same
-pattern `nuxt-auth-utils` itself uses, since `#imports` is a virtual module
-Nuxt only generates inside a real app. With that in place `pnpm typecheck`
-now covers `nuxt/src/runtime/**` too, `#imports` and all -- run
-`pnpm --filter=@oauth-spa-kit/nuxt run dev:prepare` once after cloning (CI
-does this automatically before typechecking).
+network access by default) that exists for one reason: `nuxi prepare
+playground` generates `playground/.nuxt/tsconfig*.json`, which the `nuxt`
+package's own `tsconfig.json` references instead of compiling `src/`
+directly -- the same pattern `nuxt-auth-utils` itself uses, since `#imports`
+is a virtual module Nuxt only generates inside a real app. With that in
+place `pnpm typecheck` now covers `nuxt/src/runtime/**` too, `#imports` and
+all -- run `pnpm --filter=@oauth-spa-kit/nuxt run dev:prepare` once after
+cloning (CI does this automatically before typechecking).
+
+The same playground can also be pointed at a real local IdP instead of the
+offline stub, to click through `useAuth().login()` and confirm it actually
+lands on that server's login UI -- set `PLAYGROUND_OAUTH_AUTHORITY` (plus
+`PLAYGROUND_OAUTH_CLIENT_ID` and `PLAYGROUND_OAUTH_PRIVATE_KEY_JWK` for a
+key already registered on that client) before running `dev`; see the
+comment at the top of `packages/nuxt/playground/nuxt.config.ts` for the
+full variable list and an example invocation.
+
+### Publishing
+
+`.github/workflows/publish.yml` publishes all 4 packages to npm on push of
+a `v*` tag: install, build, typecheck, test, then `pnpm run
+publish:packages` (`pnpm -r --filter=./packages/* publish --access public
+--provenance --no-git-checks`) using an `NPM_TOKEN` repo secret (an npm
+automation token with publish rights on the `@oauth-spa-kit` scope). It
+doesn't bump versions -- bump `version` in each package's `package.json`,
+commit, then tag and push (`git tag v0.1.0 && git push origin v0.1.0`) to
+trigger a release.
 
 Next step: a real deployment target for `examples/react-spa`'s server half
 (currently written against any Web-standard-`Request` runtime, untested
