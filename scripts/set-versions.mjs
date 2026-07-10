@@ -4,7 +4,12 @@
 // "workspace:*" deps are left untouched -- `pnpm publish` resolves those to the
 // real version at publish time, which is correct here since every package gets
 // the same version.
-import { readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
+//
+// Edits the "version" field in place via a regex on the raw text, rather than
+// JSON.parse + JSON.stringify -- a full round trip reformats the whole file
+// (e.g. collapses `"files": ["dist"]` onto multiple lines), turning every
+// release commit's diff into unrelated formatting churn.
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const version = process.argv[2];
@@ -23,10 +28,10 @@ for (const name of readdirSync(packagesDir)) {
     continue;
   }
 
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  const raw = readFileSync(pkgPath, "utf8");
+  const pkg = JSON.parse(raw);
   if (pkg.private) continue; // skip the playground
 
-  pkg.version = version;
-  writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+  writeFileSync(pkgPath, raw.replace(/"version":\s*"[^"]*"/, `"version": "${version}"`));
   console.log(`  ${pkg.name}@${version}`);
 }
