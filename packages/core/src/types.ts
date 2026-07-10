@@ -13,7 +13,7 @@ export interface OidcDiscoveryDocument {
   require_pushed_authorization_requests?: boolean;
 }
 
-import type { JwtAlgorithm } from "./jwt";
+import type { JwtAlgorithm } from "./jwt.js";
 
 /**
  * Confidential-client authentication to the token endpoint, via a signed

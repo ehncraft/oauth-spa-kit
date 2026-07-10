@@ -1,6 +1,6 @@
-import { buildClientAssertionParams } from "./clientAssertion";
-import { OAuthError } from "./errors";
-import type { ClientAuthentication } from "./types";
+import { buildClientAssertionParams } from "./clientAssertion.js";
+import { OAuthError } from "./errors.js";
+import type { ClientAuthentication } from "./types.js";
 
 /**
  * RFC 9126 Pushed Authorization Requests -- required by FAPI 2.0. Instead

@@ -1,6 +1,6 @@
-import { signJwt } from "./jwt";
-import { generateRandomString } from "./pkce";
-import type { ClientAuthentication } from "./types";
+import { signJwt } from "./jwt.js";
+import { generateRandomString } from "./pkce.js";
+import type { ClientAuthentication } from "./types.js";
 
 /**
  * RFC 7523 `private_key_jwt` client assertion -- the form params to attach

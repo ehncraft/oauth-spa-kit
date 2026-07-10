@@ -15,8 +15,8 @@ import {
   type OAuthClientConfig,
   type OidcDiscoveryDocument,
 } from "@oauth-spa-kit/core";
-import { clearPkceStateHeader, readPkceState, writePkceStateHeader } from "./pkceState";
-import { clearSessionHeader, readSession, writeSessionHeader, type SessionConfig } from "./session";
+import { clearPkceStateHeader, readPkceState, writePkceStateHeader } from "./pkceState.js";
+import { clearSessionHeader, readSession, writeSessionHeader, type SessionConfig } from "./session.js";
 
 export interface OAuthHandlersConfig {
   oauth: OAuthClientConfig;

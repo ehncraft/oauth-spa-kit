@@ -1,6 +1,6 @@
-import { base64UrlEncode } from "./base64url";
-import { signJwt } from "./jwt";
-import { generateRandomString } from "./pkce";
+import { base64UrlEncode } from "./base64url.js";
+import { signJwt } from "./jwt.js";
+import { generateRandomString } from "./pkce.js";
 
 /**
  * DPoP (RFC 9449) -- sender-constrained tokens. Required by default in this

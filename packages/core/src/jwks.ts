@@ -1,5 +1,5 @@
-import { DiscoveryError } from "./errors";
-import type { Jwks } from "./jwt";
+import { DiscoveryError } from "./errors.js";
+import type { Jwks } from "./jwt.js";
 
 const cache = new Map<string, { jwks: Jwks; fetchedAt: number }>();
 const CACHE_TTL_MS = 60 * 60 * 1000;

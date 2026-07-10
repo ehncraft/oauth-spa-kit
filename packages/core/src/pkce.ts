@@ -8,7 +8,7 @@
  * never treated as optional.
  */
 
-import { base64UrlEncode } from "./base64url";
+import { base64UrlEncode } from "./base64url.js";
 
 function randomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);

@@ -1,7 +1,7 @@
-import { buildClientAssertionParams } from "./clientAssertion";
-import { createDpopProof, generateDpopKeyPair, type DpopKeyPair } from "./dpop";
-import { TokenExchangeError } from "./errors";
-import type { OAuthClientConfig, TokenResponse, TokenSet } from "./types";
+import { buildClientAssertionParams } from "./clientAssertion.js";
+import { createDpopProof, generateDpopKeyPair, type DpopKeyPair } from "./dpop.js";
+import { TokenExchangeError } from "./errors.js";
+import type { OAuthClientConfig, TokenResponse, TokenSet } from "./types.js";
 
 export function toTokenSet(response: TokenResponse): TokenSet {
   return {

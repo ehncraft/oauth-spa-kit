@@ -1,10 +1,26 @@
 import { addImports, addServerHandler, addPlugin, createResolver, defineNuxtModule } from "@nuxt/kit";
 import { defu } from "defu";
-import type { OAuthClientConfig } from "@oauth-spa-kit/core";
+import type { OAuthClientConfig, JwtAlgorithm } from "@oauth-spa-kit/core";
 import type { SessionConfig } from "@oauth-spa-kit/server";
 
+/**
+ * Same shape as `@oauth-spa-kit/core`'s `ClientAuthentication`, except the
+ * private key is a plain JWK instead of a live `CryptoKey`. This config
+ * goes through Nuxt's `runtimeConfig`, which only round-trips
+ * JSON-serializable values -- a `CryptoKey` doesn't survive Nitro's build
+ * pipeline intact. The server routes import it into a real `CryptoKey` on
+ * first use instead; see `runtime/server/utils/config.ts`.
+ */
+export interface ModuleClientAuthentication {
+  method: "private_key_jwt";
+  privateKeyJwk: JsonWebKey;
+  keyId?: string;
+  alg?: JwtAlgorithm;
+  assertionLifetimeSeconds?: number;
+}
+
 export interface ModuleOptions {
-  oauth: OAuthClientConfig;
+  oauth: Omit<OAuthClientConfig, "clientAuthentication"> & { clientAuthentication: ModuleClientAuthentication };
   session: SessionConfig;
   refreshThresholdSeconds?: number;
 }

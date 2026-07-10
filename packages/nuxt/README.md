@@ -27,7 +27,7 @@ export default defineNuxtConfig({
       clientId: "spa-kit-demo",
       clientAuthentication: {
         method: "private_key_jwt",
-        privateKey, // a non-extractable CryptoKey, PS256 or ES256 -- from runtime config, never baked into the client bundle
+        privateKeyJwk, // a JWK (PS256 or ES256), e.g. JSON.parse(process.env.OAUTH_PRIVATE_KEY_JWK!) -- server-only runtime config, never baked into the client bundle
       },
       redirectUri: "https://app.example.com/auth/callback",
       scope: "openid profile offline_access",

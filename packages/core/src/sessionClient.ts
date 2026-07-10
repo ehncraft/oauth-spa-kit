@@ -1,4 +1,4 @@
-import type { SessionState } from "./types";
+import type { SessionState } from "./types.js";
 
 /**
  * Browser-side session client for the BFF pattern: the SPA never sees an

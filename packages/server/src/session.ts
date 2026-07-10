@@ -1,6 +1,6 @@
 import type { AuthenticatedUser, SerializedDpopKeyPair, TokenSet } from "@oauth-spa-kit/core";
-import { sealJson, unsealJson } from "./crypto";
-import { parseCookies, serializeCookie, expireCookie } from "./cookies";
+import { sealJson, unsealJson } from "./crypto.js";
+import { parseCookies, serializeCookie, expireCookie } from "./cookies.js";
 
 export interface StoredSession {
   tokens: TokenSet;

@@ -1,5 +1,5 @@
-import { DiscoveryError } from "./errors";
-import type { OidcDiscoveryDocument } from "./types";
+import { DiscoveryError } from "./errors.js";
+import type { OidcDiscoveryDocument } from "./types.js";
 
 const cache = new Map<string, { doc: OidcDiscoveryDocument; fetchedAt: number }>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h -- discovery docs change essentially never, but don't cache forever

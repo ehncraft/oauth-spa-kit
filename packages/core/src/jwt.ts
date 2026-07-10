@@ -1,5 +1,5 @@
-import { base64UrlDecode, base64UrlDecodeJson, base64UrlEncode, base64UrlEncodeJson } from "./base64url";
-import { OAuthError } from "./errors";
+import { base64UrlDecode, base64UrlDecodeJson, base64UrlEncode, base64UrlEncodeJson } from "./base64url.js";
+import { OAuthError } from "./errors.js";
 
 /**
  * PS256 (RSA-PSS) and ES256 (ECDSA P-256) only -- no RS256. FAPI 2.0
@@ -56,6 +56,18 @@ export interface Jwks {
 
 async function importVerificationKey(jwk: JsonWebKey, alg: JwtAlgorithm): Promise<CryptoKey> {
   return globalThis.crypto.subtle.importKey("jwk", jwk, importParams(alg), false, ["verify"]);
+}
+
+/**
+ * Import a `private_key_jwt` signing key from its JWK form. Non-extractable,
+ * matching the doc comment on `ClientAuthentication.privateKey` in types.ts
+ * -- for config paths that can only carry JSON-serializable values (e.g.
+ * `@oauth-spa-kit/nuxt`'s runtimeConfig, which a live `CryptoKey` doesn't
+ * survive), so the JWK travels through config and gets imported once
+ * server-side instead.
+ */
+export async function importClientAssertionPrivateKey(jwk: JsonWebKey, alg: JwtAlgorithm): Promise<CryptoKey> {
+  return globalThis.crypto.subtle.importKey("jwk", jwk, importParams(alg), false, ["sign"]);
 }
 
 function algFromJwtHeader(header: Record<string, unknown>): JwtAlgorithm {
