@@ -193,16 +193,35 @@ key already registered on that client) before running `dev`; see the
 comment at the top of `packages/nuxt/playground/nuxt.config.ts` for the
 full variable list and an example invocation.
 
-### Publishing
+### Releasing
 
-`.github/workflows/publish.yml` publishes all 4 packages to npm on push of
-a `v*` tag: install, build, typecheck, test, then `pnpm run
-publish:packages` (`pnpm -r --filter=./packages/* publish --access public
---provenance --no-git-checks`) using an `NPM_TOKEN` repo secret (an npm
-automation token with publish rights on the `@oauth-spa-kit` scope). It
-doesn't bump versions -- bump `version` in each package's `package.json`,
-commit, then tag and push (`git tag v0.1.0 && git push origin v0.1.0`) to
-trigger a release.
+Versioning and publishing are automated with
+[semantic-release](https://semantic-release.gitbook.io/), driven by
+[Conventional Commits](https://www.conventionalcommits.org/) -- there's no
+manual version bump or tag. `.github/workflows/release.yml` runs on every
+push to `master` (install, build, typecheck, test, then `pnpm run
+release`); semantic-release reads the commits since the last release,
+decides whether a release is needed and what type (`fix:` -> patch,
+`feat:` -> minor, a `BREAKING CHANGE:` footer -> major), and if so:
+
+- Stamps that version into all 4 `packages/*/package.json` in lockstep
+  (`scripts/set-versions.mjs`, driven by `release.config.js`'s
+  `@semantic-release/exec` step) -- they always ship at the same version.
+- Publishes all 4 to npm via `pnpm run publish:packages` (not
+  `@semantic-release/npm`'s own publish step, which shells out to plain
+  `npm publish` and wouldn't resolve pnpm's `workspace:*` protocol in the
+  packages' internal deps).
+- Updates `CHANGELOG.md`, commits `chore(release): x.y.z [skip ci]`, tags,
+  and pushes back to `master`, then creates a GitHub Release.
+
+Needs an `NPM_TOKEN` repo secret (an npm automation token with publish
+rights on the `@oauth-spa-kit` scope) -- `GITHUB_TOKEN` is the default
+Actions token, already scoped by the `permissions:` block in the workflow.
+
+Commit messages are enforced locally via commitlint + husky
+(`.husky/commit-msg`, `commitlint.config.js`) -- a non-conventional commit
+message is rejected at commit time, before it can silently fail to trigger
+the release it should.
 
 Next step: a real deployment target for `examples/react-spa`'s server half
 (currently written against any Web-standard-`Request` runtime, untested
