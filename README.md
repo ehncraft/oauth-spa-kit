@@ -164,8 +164,9 @@ the BFF pattern there's no need for it: renewal is a same-origin
 
 ## Status
 
-Not yet published, but the full pipeline has actually been run, not just
-eyeballed: `pnpm install`, `pnpm build`/`typecheck` across all 4 packages
+Published on npm under the [`@oauth-spa-kit`](https://www.npmjs.com/org/oauth-spa-kit)
+scope. The full pipeline has actually been run, not just eyeballed:
+`pnpm install`, `pnpm build`/`typecheck` across all 4 packages
 (`nuxt` via its real build tool, `nuxt-module-build`), and `pnpm test` --
 **78 passing tests** across `core` and `server` (PKCE against the RFC 7636
 test vector, JWT sign/verify for both algorithms, DPoP proof structure +
@@ -214,9 +215,13 @@ decides whether a release is needed and what type (`fix:` -> patch,
 - Updates `CHANGELOG.md`, commits `chore(release): x.y.z [skip ci]`, tags,
   and pushes back to `master`, then creates a GitHub Release.
 
-Needs an `NPM_TOKEN` repo secret (an npm automation token with publish
-rights on the `@oauth-spa-kit` scope) -- `GITHUB_TOKEN` is the default
-Actions token, already scoped by the `permissions:` block in the workflow.
+Publishing uses npm's [Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)
+(OIDC) -- no `NPM_TOKEN` secret involved. Each of the 4 packages has this
+repo's `release.yml` workflow registered as a trusted publisher on
+npmjs.com; the workflow's `id-token: write` permission is what lets it mint
+a short-lived OIDC token at publish time instead. `GITHUB_TOKEN` is the
+default Actions token, already scoped by the `permissions:` block in the
+workflow.
 
 Commit messages are enforced locally via commitlint + husky
 (`.husky/commit-msg`, `commitlint.config.js`) -- a non-conventional commit

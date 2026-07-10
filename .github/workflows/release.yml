@@ -17,15 +17,17 @@ jobs:
         with:
           fetch-depth: 0 # semantic-release needs full history to read commits since the last release
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9.12.0
+      - uses: pnpm/action-setup@v4 # version comes from package.json's "packageManager" field
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
+
+      # npm trusted publishing (OIDC) needs npm CLI >=11.5.1; don't rely on
+      # whatever ships bundled with the Node version above.
+      - run: npm install -g npm@latest
 
       - run: pnpm install --frozen-lockfile
 
@@ -40,4 +42,3 @@ jobs:
       - run: pnpm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
