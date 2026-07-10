@@ -1,6 +1,6 @@
 import { useContext, useSyncExternalStore } from "react";
 import type { SessionState } from "@oauth-spa-kit/core";
-import { AuthContext } from "./AuthProvider";
+import { AuthContext } from "./AuthProvider.js";
 
 export interface UseAuthResult extends SessionState {
   login: (returnTo?: string) => void;

@@ -1,6 +1,6 @@
 import type { SerializedDpopKeyPair } from "@oauth-spa-kit/core";
-import { sealJson, unsealJson } from "./crypto";
-import { parseCookies, serializeCookie, expireCookie } from "./cookies";
+import { sealJson, unsealJson } from "./crypto.js";
+import { parseCookies, serializeCookie, expireCookie } from "./cookies.js";
 
 /**
  * Holds the PKCE verifier + state + nonce for the ~seconds it takes the

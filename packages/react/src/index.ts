@@ -1,3 +1,3 @@
-export { AuthProvider } from "./AuthProvider";
-export { useAuth } from "./useAuth";
-export type { UseAuthResult } from "./useAuth";
+export { AuthProvider } from "./AuthProvider.js";
+export { useAuth } from "./useAuth.js";
+export type { UseAuthResult } from "./useAuth.js";
