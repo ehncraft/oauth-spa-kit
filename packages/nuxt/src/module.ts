@@ -20,7 +20,17 @@ export interface ModuleClientAuthentication {
 }
 
 export interface ModuleOptions {
-  oauth: Omit<OAuthClientConfig, "clientAuthentication"> & { clientAuthentication: ModuleClientAuthentication };
+  oauth: Omit<OAuthClientConfig, "clientAuthentication" | "redirectUri"> & {
+    clientAuthentication: ModuleClientAuthentication;
+    /**
+     * Defaults to `${requestOrigin}/auth/callback`, derived per-request from
+     * the incoming Host header (X-Forwarded-Host-aware) -- a BFF app is only
+     * ever reached at the origin it's registered under with the AS, so that
+     * origin is the right default. Set explicitly only if the app is fronted
+     * by a hostname the request itself won't reflect.
+     */
+    redirectUri?: string;
+  };
   session: SessionConfig;
   refreshThresholdSeconds?: number;
 }

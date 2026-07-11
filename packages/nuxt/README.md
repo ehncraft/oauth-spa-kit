@@ -29,8 +29,10 @@ export default defineNuxtConfig({
         method: "private_key_jwt",
         privateKeyJwk, // a JWK (PS256 or ES256), e.g. JSON.parse(process.env.OAUTH_PRIVATE_KEY_JWK!) -- server-only runtime config, never baked into the client bundle
       },
-      redirectUri: "https://app.example.com/auth/callback",
       scope: "openid profile offline_access",
+      // redirectUri defaults to `${requestOrigin}/auth/callback`, derived
+      // per-request from the incoming Host header -- set it explicitly only
+      // if the app is fronted by a hostname the request itself won't see.
       // dpop and par both default to true (FAPI 2.0 baseline)
     },
     session: {

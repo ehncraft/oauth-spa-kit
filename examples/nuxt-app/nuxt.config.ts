@@ -23,9 +23,10 @@ export default defineNuxtConfig({
         keyId: process.env.OAUTH_CLIENT_KEY_ID,
         alg: "ES256",
       },
-      redirectUri: `${process.env.APP_ORIGIN}/auth/callback`,
-      postLogoutRedirectUri: process.env.APP_ORIGIN,
       scope: "openid profile email offline_access",
+      // redirectUri / postLogoutRedirectUri default to the request's own
+      // origin (Host header, X-Forwarded-Host-aware) -- set them explicitly
+      // only if this app is fronted by a hostname the request won't reflect.
       // dpop and par both default to true (FAPI 2.0 baseline) -- omitted here deliberately.
     },
     session: {
