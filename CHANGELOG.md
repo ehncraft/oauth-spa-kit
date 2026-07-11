@@ -1,3 +1,25 @@
+# [2.0.0](https://github.com/ehncraft/oauth-spa-kit/compare/v1.2.0...v2.0.0) (2026-07-11)
+
+
+* fix(core)!: audience the client assertion to the issuer, not the endpoint URL ([82bc6b7](https://github.com/ehncraft/oauth-spa-kit/commit/82bc6b70c402cfb231c3d863076c9d08aa331687))
+
+
+### Bug Fixes
+
+* **core:** explicitly type client assertions as client-authentication+jwt ([badd87e](https://github.com/ehncraft/oauth-spa-kit/commit/badd87eed9febe87d5daf221170811838dbff23c))
+
+
+### BREAKING CHANGES
+
+* exchangeAuthorizationCode and exchangeRefreshToken
+(@oauth-spa-kit/core) now require an explicit assertionAudience argument,
+matching pushAuthorizationRequest's existing shape, instead of silently
+defaulting to tokenEndpoint. Callers using @oauth-spa-kit/server's
+handlers (including @oauth-spa-kit/nuxt) need no changes -- this is
+handled internally. Callers using @oauth-spa-kit/core directly must pass
+assertionAudience explicitly, and should pass their AS's issuer
+identifier per rfc7523bis rather than the token endpoint URL.
+
 # [1.2.0](https://github.com/ehncraft/oauth-spa-kit/compare/v1.1.0...v1.2.0) (2026-07-11)
 
 
