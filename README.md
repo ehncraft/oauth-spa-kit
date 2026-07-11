@@ -80,7 +80,11 @@ packages/
             createLogoutHandler / getAuthorizationHeader. Handlers are
             plain `(Request) => Promise<Response>` -- deploy on Nitro,
             Next.js route handlers, Cloudflare Workers, or Node via a small
-            adapter.
+            adapter. Also exposes an OpenID AuthZEN Authorization API
+            client (evaluateAccess / evaluateAccessBatch / searchResources /
+            searchSubjects / searchActions) for externalized authorization
+            decisions, authenticated with the same session access token
+            getAuthorizationHeader uses.
   react/    <AuthProvider> + useAuth() (useSyncExternalStore-based).
   nuxt/     Nuxt module: wires server/'s handlers as Nitro routes, exposes
             a useAuth() composable with the same shape as react/'s.
