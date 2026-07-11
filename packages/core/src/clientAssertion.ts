@@ -23,6 +23,15 @@ import type { ClientAuthentication } from "./types.js";
  * `audience` here is deliberately not defaulted so a caller integrating
  * with such an AS still has to pass a value explicitly, rather than this
  * kit silently reintroducing an obsolete pattern.
+ *
+ * The JWT header is also explicitly typed `client-authentication+jwt`,
+ * rfc7523bis section 3.2's recommended (SHOULD) explicit type for this
+ * assertion class -- RFC 8725 section 3.11 explicit typing, applied here to
+ * rule out cross-JWT confusion (this token being mistaken for, say, an
+ * access token or an `id_token`). The spec itself says a server SHOULD NOT
+ * reject an untyped assertion for backward compatibility, but some AS's
+ * enforce it as a MUST; setting it unconditionally costs nothing and is
+ * forward-compatible either way.
  */
 export async function buildClientAssertionParams(
   clientId: string,
@@ -33,7 +42,7 @@ export async function buildClientAssertionParams(
   const lifetimeSeconds = clientAuth.assertionLifetimeSeconds ?? 60;
 
   const assertion = await signJwt({
-    header: clientAuth.keyId ? { kid: clientAuth.keyId } : {},
+    header: { typ: "client-authentication+jwt", ...(clientAuth.keyId ? { kid: clientAuth.keyId } : {}) },
     payload: {
       iss: clientId,
       sub: clientId,

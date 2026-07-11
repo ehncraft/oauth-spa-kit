@@ -29,6 +29,19 @@ describe("buildClientAssertionParams", () => {
     expect(payload.jti).toBeTypeOf("string");
   });
 
+  it("explicitly types the header as client-authentication+jwt (rfc7523bis section 3.2)", async () => {
+    const { privateKey } = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const params = await buildClientAssertionParams(
+      "client-1",
+      { method: "private_key_jwt", privateKey, keyId: "k1", alg: "ES256" },
+      "https://as.example",
+    );
+    const [encodedHeader] = params.client_assertion.split(".");
+    const header = JSON.parse(atob(encodedHeader.replace(/-/g, "+").replace(/_/g, "/")));
+    expect(header.typ).toBe("client-authentication+jwt");
+    expect(header.kid).toBe("k1"); // still overridable/extendable, not clobbered by the default
+  });
+
   it("defaults to a short (<=60s) assertion lifetime", async () => {
     const { privateKey } = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
     const params = await buildClientAssertionParams(
