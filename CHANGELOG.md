@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/ehncraft/oauth-spa-kit/compare/v1.0.1...v1.0.2) (2026-07-11)
+
+
+### Bug Fixes
+
+* repair broken ESM resolution, SSR crash, and private key config in published packages ([114df0c](https://github.com/ehncraft/oauth-spa-kit/commit/114df0cb66ebac79781a99a2fde82904fabd8865))
+
 ## [1.0.1](https://github.com/ehncraft/oauth-spa-kit/compare/v1.0.0...v1.0.1) (2026-07-10)
 
 
