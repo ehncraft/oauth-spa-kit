@@ -175,6 +175,14 @@ async function extractPushedParams(config: OAuthHandlersConfig): Promise<string>
   return parCall![1].body as string;
 }
 
+/** Pulls the most recent /token request body off the fetch mock's call history. */
+function extractLastTokenParams(config: OAuthHandlersConfig): string {
+  const fetchImpl = config.fetchImpl as ReturnType<typeof vi.fn>;
+  const calls = fetchImpl.mock.calls as FetchCall[];
+  const tokenCalls = calls.filter(([url]) => url.endsWith("/token"));
+  return tokenCalls.at(-1)![1].body as string;
+}
+
 describe("createLoginHandler", () => {
   it("pushes the authorization request (PAR) and redirects with only client_id + request_uri", async () => {
     const { config, fetchImpl } = await setup();
@@ -221,6 +229,17 @@ describe("createLoginHandler", () => {
     const login = createLoginHandler(config);
     await expect(login(new Request("https://app.example/auth/login"))).rejects.toThrow(OAuthError);
   });
+
+  it("authenticates the PAR request with a client assertion audienced to the issuer, not the PAR endpoint (rfc7523bis)", async () => {
+    const { config } = await setup();
+    const login = createLoginHandler(config);
+    await login(new Request("https://app.example/auth/login"));
+
+    const body = new URLSearchParams(await extractPushedParams(config));
+    const assertion = body.get("client_assertion")!;
+    const payload = decodeJwtPart(assertion.split(".")[1]);
+    expect(payload.aud).toBe(config.oauth.discoveryDocument!.issuer);
+  });
 });
 
 describe("createCallbackHandler", () => {
@@ -233,6 +252,16 @@ describe("createCallbackHandler", () => {
     const setCookies = callbackResponse.headers.getSetCookie();
     expect(setCookies.some((c) => c.startsWith("__session="))).toBe(true);
     expect(setCookies.some((c) => c.startsWith("__oauth_pkce=") && c.includes("Max-Age=0"))).toBe(true);
+  });
+
+  it("authenticates the code exchange with a client assertion audienced to the issuer, not the token endpoint (rfc7523bis)", async () => {
+    const { config } = await setup();
+    await loginAndCallback(config);
+
+    const body = new URLSearchParams(extractLastTokenParams(config));
+    const assertion = body.get("client_assertion")!;
+    const payload = decodeJwtPart(assertion.split(".")[1]);
+    expect(payload.aud).toBe(config.oauth.discoveryDocument!.issuer);
   });
 
   it("exposes the verified id_token claims via /auth/session", async () => {
@@ -297,6 +326,11 @@ describe("createSessionHandler refresh", () => {
     const [, initialInit] = tokenCalls[0];
     const [, refreshInit] = tokenCalls[1];
     expect(dpopProofJwkX(refreshInit.headers)).toBe(dpopProofJwkX(initialInit.headers));
+
+    // rfc7523bis: the refresh's client assertion must be audienced to the
+    // issuer too, same as the original code exchange.
+    const refreshAssertion = new URLSearchParams(refreshInit.body).get("client_assertion")!;
+    expect(decodeJwtPart(refreshAssertion.split(".")[1]).aud).toBe(config.oauth.discoveryDocument!.issuer);
   });
 
   it("clears the session and returns 401 when the refresh token is revoked", async () => {

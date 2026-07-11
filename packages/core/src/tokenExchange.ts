@@ -82,6 +82,8 @@ async function postToken(args: PostTokenArgs): Promise<TokenResponse> {
 export interface ExchangeAuthorizationCodeArgs {
   config: OAuthClientConfig;
   tokenEndpoint: string;
+  /** Client assertion `aud` -- pass the AS's issuer identifier (rfc7523bis section 4 mandates this as the sole value; see `buildClientAssertionParams`). */
+  assertionAudience: string;
   code: string;
   codeVerifier: string;
   /** Reuse the same key pair used to bind the authorization request, if DPoP was used there too. A fresh one is generated if omitted and `config.dpop !== false`. */
@@ -95,7 +97,7 @@ export async function exchangeAuthorizationCode(args: ExchangeAuthorizationCodeA
   const assertionParams = await buildClientAssertionParams(
     args.config.clientId,
     args.config.clientAuthentication,
-    args.tokenEndpoint,
+    args.assertionAudience,
   );
   const params = new URLSearchParams({
     grant_type: "authorization_code",
@@ -117,6 +119,8 @@ export async function exchangeAuthorizationCode(args: ExchangeAuthorizationCodeA
 export interface ExchangeRefreshTokenArgs {
   config: OAuthClientConfig;
   tokenEndpoint: string;
+  /** Client assertion `aud` -- pass the AS's issuer identifier (rfc7523bis section 4 mandates this as the sole value; see `buildClientAssertionParams`). */
+  assertionAudience: string;
   refreshToken: string;
   dpopKeyPair?: DpopKeyPair;
   fetchImpl?: typeof fetch;
@@ -140,7 +144,7 @@ export async function exchangeRefreshToken(args: ExchangeRefreshTokenArgs): Prom
   const assertionParams = await buildClientAssertionParams(
     args.config.clientId,
     args.config.clientAuthentication,
-    args.tokenEndpoint,
+    args.assertionAudience,
   );
   const params = new URLSearchParams({
     grant_type: "refresh_token",
