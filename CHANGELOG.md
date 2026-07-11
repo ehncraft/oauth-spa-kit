@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.0...v2.0.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* make the playground Docker image distroless and HTTPS only ([938a005](https://github.com/ehncraft/oauth-spa-kit/commit/938a00532fef13ab181e49d6b53eb90b26df6643))
+
 # [2.0.0](https://github.com/ehncraft/oauth-spa-kit/compare/v1.2.0...v2.0.0) (2026-07-11)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "@oauth-spa-kit/core",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Framework- and runtime-agnostic OAuth 2.1 / OIDC primitives (PKCE, discovery, token exchange, DPoP) plus a fetch-based session client. Runs in the browser, Node, and edge runtimes -- no DOM or Node-only APIs.",
   "license": "MIT",
   "repository": {
