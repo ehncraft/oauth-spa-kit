@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/ehncraft/oauth-spa-kit/compare/v1.0.2...v1.1.0) (2026-07-11)
+
+
+### Features
+
+* **server:** add OpenID AuthZEN Authorization API client ([20db484](https://github.com/ehncraft/oauth-spa-kit/commit/20db48498b8ae73900bdc181e85388b162f5c6eb))
+
 ## [1.0.2](https://github.com/ehncraft/oauth-spa-kit/compare/v1.0.1...v1.0.2) (2026-07-11)
 
 

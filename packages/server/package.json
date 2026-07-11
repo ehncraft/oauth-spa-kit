@@ -1,6 +1,6 @@
 {
   "name": "@oauth-spa-kit/server",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "BFF-pattern OAuth handlers: sealed HttpOnly-cookie sessions + login/callback/refresh/logout route factories, built on Web-standard Request/Response so they drop into Nitro, Next.js route handlers, Cloudflare Workers, or plain Node (via a small adapter).",
   "license": "MIT",
   "repository": {
