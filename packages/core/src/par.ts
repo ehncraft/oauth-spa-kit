@@ -16,7 +16,7 @@ export interface PushAuthorizationRequestArgs {
   parEndpoint: string;
   clientId: string;
   clientAuthentication: ClientAuthentication;
-  /** Authorization server issuer identifier -- used to look up a client assertion audience if your AS expects it instead of the endpoint URL. Prefer passing the PAR endpoint URL itself unless your AS's docs say otherwise. */
+  /** Client assertion `aud` -- pass the AS's issuer identifier (rfc7523bis section 4 mandates this as the sole value; see `buildClientAssertionParams`). */
   assertionAudience: string;
   /** Authorization request parameters (response_type, redirect_uri, scope, state, nonce, code_challenge, code_challenge_method, and any extras) -- everything that would otherwise go on the `/authorize` query string. */
   params: Record<string, string>;

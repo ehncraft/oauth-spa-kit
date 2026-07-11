@@ -101,7 +101,7 @@ export function createLoginHandler(config: OAuthHandlersConfig) {
         parEndpoint: discovery.pushed_authorization_request_endpoint,
         clientId: config.oauth.clientId,
         clientAuthentication: config.oauth.clientAuthentication,
-        assertionAudience: discovery.pushed_authorization_request_endpoint,
+        assertionAudience: discovery.issuer,
         params: authParams,
         fetchImpl: config.fetchImpl,
       });
@@ -156,6 +156,7 @@ export function createCallbackHandler(config: OAuthHandlersConfig) {
       const tokens = await exchangeAuthorizationCode({
         config: config.oauth,
         tokenEndpoint: discovery.token_endpoint,
+        assertionAudience: discovery.issuer,
         code,
         codeVerifier: pkce.codeVerifier,
         dpopKeyPair,
@@ -213,6 +214,7 @@ export function createSessionHandler(config: OAuthHandlersConfig) {
       session.tokens = await exchangeRefreshToken({
         config: config.oauth,
         tokenEndpoint: discovery.token_endpoint,
+        assertionAudience: discovery.issuer,
         refreshToken: session.tokens.refreshToken,
         dpopKeyPair,
         fetchImpl: config.fetchImpl,
@@ -283,6 +285,7 @@ export async function getAuthorizationHeader(
     session.tokens = await exchangeRefreshToken({
       config: config.oauth,
       tokenEndpoint: discovery.token_endpoint,
+      assertionAudience: discovery.issuer,
       refreshToken: session.tokens.refreshToken,
       dpopKeyPair,
       fetchImpl: config.fetchImpl,

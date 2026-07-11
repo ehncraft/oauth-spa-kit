@@ -9,10 +9,20 @@ import type { ClientAuthentication } from "./types.js";
  * supports; there is no client_secret fallback (see the comment on
  * `ClientAuthentication` in types.ts for why).
  *
- * `audience` is conventionally the URL of the endpoint being authenticated
- * to (OIDC Core section 9); a few authorization servers expect the issuer
- * identifier instead regardless of which endpoint is called -- check your
- * AS's docs if it rejects the assertion with an audience error.
+ * `audience` MUST be the authorization server's issuer identifier
+ * ([RFC 8414](https://www.rfc-editor.org/rfc/rfc8414)) as its sole value --
+ * per [draft-ietf-oauth-rfc7523bis](https://datatracker.ietf.org/doc/draft-ietf-oauth-rfc7523bis/)
+ * section 4, which updates RFC 7523 specifically to close an audience
+ * injection vulnerability (disclosed January 2025): a token-endpoint URL
+ * (the older, now-superseded convention) or any other endpoint-specific
+ * value MUST NOT be used, and a compliant AS MUST reject an assertion that
+ * doesn't carry its issuer identifier as the sole `aud`. This kit's own
+ * callers (`packages/server/src/handlers.ts`) always pass the discovery
+ * document's `issuer` for this reason. If an AS rejects a valid assertion
+ * with an audience error, the AS is non-compliant with the current spec --
+ * `audience` here is deliberately not defaulted so a caller integrating
+ * with such an AS still has to pass a value explicitly, rather than this
+ * kit silently reintroducing an obsolete pattern.
  */
 export async function buildClientAssertionParams(
   clientId: string,

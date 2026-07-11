@@ -11,6 +11,10 @@ function jsonResponse(body: unknown, status = 200, headers: Record<string, strin
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
+function decodeJwtPayload(jwt: string): Record<string, unknown> {
+  return JSON.parse(atob(jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+}
+
 async function baseConfig(overrides: Partial<OAuthClientConfig> = {}): Promise<OAuthClientConfig> {
   const { privateKey } = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   return {
@@ -32,6 +36,7 @@ describe("exchangeAuthorizationCode", () => {
     const tokens = await exchangeAuthorizationCode({
       config: await baseConfig(),
       tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
       code: "code-1",
       codeVerifier: "verifier-1",
       fetchImpl,
@@ -50,6 +55,22 @@ describe("exchangeAuthorizationCode", () => {
     expect(body.has("client_secret")).toBe(false);
   });
 
+  it("audiences the client assertion to assertionAudience, not the token endpoint (rfc7523bis)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: "at", token_type: "DPoP", expires_in: 3600 }));
+    await exchangeAuthorizationCode({
+      config: await baseConfig(),
+      tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
+      code: "code-1",
+      codeVerifier: "verifier-1",
+      fetchImpl,
+    });
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = new URLSearchParams(init.body as URLSearchParams);
+    const payload = decodeJwtPayload(body.get("client_assertion")!);
+    expect(payload.aud).toBe("https://as.example");
+  });
+
   it("omits the DPoP header when config.dpop === false", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       jsonResponse({ access_token: "at", token_type: "Bearer", expires_in: 3600 }),
@@ -57,6 +78,7 @@ describe("exchangeAuthorizationCode", () => {
     await exchangeAuthorizationCode({
       config: await baseConfig({ dpop: false }),
       tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
       code: "code-1",
       codeVerifier: "verifier-1",
       fetchImpl,
@@ -73,6 +95,7 @@ describe("exchangeAuthorizationCode", () => {
     const tokens = await exchangeAuthorizationCode({
       config: await baseConfig(),
       tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
       code: "code-1",
       codeVerifier: "verifier-1",
       fetchImpl,
@@ -92,6 +115,7 @@ describe("exchangeAuthorizationCode", () => {
       exchangeAuthorizationCode({
         config: await baseConfig({ dpop: false }),
         tokenEndpoint: "https://as.example/token",
+        assertionAudience: "https://as.example",
         code: "bad-code",
         codeVerifier: "verifier-1",
         fetchImpl,
@@ -105,6 +129,7 @@ describe("exchangeAuthorizationCode", () => {
       exchangeAuthorizationCode({
         config: await baseConfig({ dpop: false }),
         tokenEndpoint: "https://as.example/token",
+        assertionAudience: "https://as.example",
         code: "code-1",
         codeVerifier: "verifier-1",
         fetchImpl,
@@ -119,6 +144,7 @@ describe("exchangeAuthorizationCode", () => {
     await exchangeAuthorizationCode({
       config: await baseConfig(),
       tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
       code: "code-1",
       codeVerifier: "verifier-1",
       dpopKeyPair: keyPair,
@@ -138,6 +164,7 @@ describe("exchangeRefreshToken", () => {
     const tokens = await exchangeRefreshToken({
       config: await baseConfig(),
       tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
       refreshToken: "rt-original",
       fetchImpl,
     });
@@ -151,9 +178,25 @@ describe("exchangeRefreshToken", () => {
     const tokens = await exchangeRefreshToken({
       config: await baseConfig(),
       tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
       refreshToken: "rt-original",
       fetchImpl,
     });
     expect(tokens.refreshToken).toBe("rt-rotated");
+  });
+
+  it("audiences the client assertion to assertionAudience, not the token endpoint (rfc7523bis)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: "at2", token_type: "DPoP", expires_in: 3600 }));
+    await exchangeRefreshToken({
+      config: await baseConfig(),
+      tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
+      refreshToken: "rt-original",
+      fetchImpl,
+    });
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = new URLSearchParams(init.body as URLSearchParams);
+    const payload = decodeJwtPayload(body.get("client_assertion")!);
+    expect(payload.aud).toBe("https://as.example");
   });
 });
