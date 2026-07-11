@@ -16,7 +16,9 @@
 # PLAYGROUND_OAUTH_PRIVATE_KEY_JWK, PLAYGROUND_OAUTH_REDIRECT_URI,
 # PLAYGROUND_OAUTH_POST_LOGOUT_REDIRECT_URI, PLAYGROUND_SESSION_PASSWORD
 # (>=32 chars, a real secret -- the checked-in placeholder is refused
-# whenever PLAYGROUND_OAUTH_AUTHORITY is set).
+# whenever PLAYGROUND_OAUTH_AUTHORITY is set), and NITRO_SSL_CERT +
+# NITRO_SSL_KEY (PEM contents) -- this image serves HTTPS only, see
+# docker-entrypoint.mjs.
 
 FROM node:24-slim AS build
 WORKDIR /app
@@ -33,12 +35,21 @@ RUN pnpm --filter=@oauth-spa-kit/nuxt run dev:prepare
 RUN pnpm build
 RUN pnpm --filter=@oauth-spa-kit/nuxt run dev:build
 
-FROM node:24-slim AS runtime
+# Distroless: no shell, no package manager, no root user by default (":nonroot"
+# tag). Nothing to install here -- just the built output -- so its minimal
+# surface is exactly what a production runtime needs.
+FROM gcr.io/distroless/nodejs24-debian13:nonroot AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
-COPY --from=build /app/packages/nuxt/playground/.output ./.output
+COPY --from=build --chown=nonroot:nonroot /app/packages/nuxt/playground/.output ./.output
+COPY --chown=nonroot:nonroot docker-entrypoint.mjs ./
 
 EXPOSE 3000
-CMD ["node", ".output/server/index.mjs"]
+
+# HTTPS only -- Nitro terminates TLS itself from NITRO_SSL_CERT/NITRO_SSL_KEY
+# (PEM contents as env vars, supplied by the deployment's own secret store;
+# never baked into the image). docker-entrypoint.mjs refuses to start rather
+# than fall back to plain HTTP if either is missing -- see that file.
+CMD ["docker-entrypoint.mjs"]
