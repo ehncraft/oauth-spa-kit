@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.1...v2.0.2) (2026-07-28)
+
+
+### Bug Fixes
+
+* **core:** mint a fresh client_assertion on the use_dpop_nonce retry ([cea29c5](https://github.com/ehncraft/oauth-spa-kit/commit/cea29c5fde915462e9abca155f2500fde68d654b))
+
 ## [2.0.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.0...v2.0.1) (2026-07-11)
 
 
