@@ -1,3 +1,10 @@
+## [2.0.3](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.2...v2.0.3) (2026-07-28)
+
+
+### Bug Fixes
+
+* **server:** redirect off /auth/callback on failure instead of rendering inline ([56f62eb](https://github.com/ehncraft/oauth-spa-kit/commit/56f62eb4025510fee8b024a8219d6f9ff2060320)), closes [TokenExchangeError#error](https://github.com/TokenExchangeError/issues/error)
+
 ## [2.0.2](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.1...v2.0.2) (2026-07-28)
 
 
