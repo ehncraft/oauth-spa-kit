@@ -109,6 +109,32 @@ describe("exchangeAuthorizationCode", () => {
     expect(payload.nonce).toBe("srv-nonce-1");
   });
 
+  it("mints a fresh client_assertion (distinct jti) for the use_dpop_nonce retry, not a replay of attempt 1", async () => {
+    // A compliant AS tracks client_assertion jti in a replay cache (RFC 7523 section 3) and
+    // rejects a repeat -- resending attempt 1's assertion unmodified on the nonce retry gets
+    // the retry itself bounced as invalid_client, even though the assertion authenticated
+    // fine the first time.
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ error: "use_dpop_nonce" }, 400, { "DPoP-Nonce": "srv-nonce-1" }))
+      .mockResolvedValueOnce(jsonResponse({ access_token: "at", token_type: "DPoP", expires_in: 3600 }));
+
+    await exchangeAuthorizationCode({
+      config: await baseConfig(),
+      tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
+      code: "code-1",
+      codeVerifier: "verifier-1",
+      fetchImpl,
+    });
+
+    const firstBody = new URLSearchParams(fetchImpl.mock.calls[0][1].body as URLSearchParams);
+    const secondBody = new URLSearchParams(fetchImpl.mock.calls[1][1].body as URLSearchParams);
+    const firstAssertion = decodeJwtPayload(firstBody.get("client_assertion")!);
+    const secondAssertion = decodeJwtPayload(secondBody.get("client_assertion")!);
+
+    expect(secondAssertion.jti).not.toBe(firstAssertion.jti);
+  });
+
   it("throws TokenExchangeError with the server's error/description on failure", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ error: "invalid_grant", error_description: "expired code" }, 400));
     await expect(

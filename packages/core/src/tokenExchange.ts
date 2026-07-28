@@ -16,7 +16,18 @@ export function toTokenSet(response: TokenResponse): TokenSet {
 
 interface PostTokenArgs {
   tokenEndpoint: string;
-  params: URLSearchParams;
+  /**
+   * Rebuilds the request body from scratch on every call, including the
+   * `use_dpop_nonce` retry -- not a pre-built `URLSearchParams` reused
+   * across attempts. `client_assertion` carries a `jti` that a compliant AS
+   * (RFC 7523 section 3) tracks in a replay cache and rejects on reuse; a
+   * static `params` object would resend the exact same assertion (same
+   * `jti`) on retry, since only the DPoP proof differs per RFC 9449's nonce
+   * challenge, and a spec-compliant AS then rejects the retry itself as a
+   * replay -- the original client_assertion having authenticated the client
+   * successfully on attempt 1 doesn't help once its jti is already spent.
+   */
+  buildParams: () => Promise<URLSearchParams>;
   dpopKeyPair?: DpopKeyPair;
   fetchImpl: typeof fetch;
 }
@@ -27,7 +38,7 @@ interface TokenErrorBody {
 }
 
 async function postTokenOnce(
-  { tokenEndpoint, params, dpopKeyPair, fetchImpl }: PostTokenArgs,
+  { tokenEndpoint, buildParams, dpopKeyPair, fetchImpl }: PostTokenArgs,
   dpopNonce?: string,
 ): Promise<{ response: Response; body: TokenErrorBody & Partial<TokenResponse> }> {
   const headers: Record<string, string> = {
@@ -42,6 +53,7 @@ async function postTokenOnce(
     });
   }
 
+  const params = await buildParams();
   const response = await fetchImpl(tokenEndpoint, { method: "POST", headers, body: params });
   const body = await response.json().catch(() => ({}));
   return { response, body };
@@ -94,25 +106,28 @@ export interface ExchangeAuthorizationCodeArgs {
 /** RFC 6749 section 4.1.3 -- authorization_code grant, PKCE-verified, private_key_jwt-authenticated. */
 export async function exchangeAuthorizationCode(args: ExchangeAuthorizationCodeArgs): Promise<TokenSet> {
   const fetchImpl = args.fetchImpl ?? fetch;
-  const assertionParams = await buildClientAssertionParams(
-    args.config.clientId,
-    args.config.clientAuthentication,
-    args.assertionAudience,
-  );
-  const params = new URLSearchParams({
-    grant_type: "authorization_code",
-    client_id: args.config.clientId,
-    code: args.code,
-    redirect_uri: args.config.redirectUri,
-    code_verifier: args.codeVerifier,
-    ...assertionParams,
-  });
+
+  const buildParams = async () => {
+    const assertionParams = await buildClientAssertionParams(
+      args.config.clientId,
+      args.config.clientAuthentication,
+      args.assertionAudience,
+    );
+    return new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: args.config.clientId,
+      code: args.code,
+      redirect_uri: args.config.redirectUri,
+      code_verifier: args.codeVerifier,
+      ...assertionParams,
+    });
+  };
 
   const dpopKeyPair = args.config.dpop === false
     ? undefined
     : args.dpopKeyPair ?? await generateDpopKeyPair();
 
-  const response = await postToken({ tokenEndpoint: args.tokenEndpoint, params, dpopKeyPair, fetchImpl });
+  const response = await postToken({ tokenEndpoint: args.tokenEndpoint, buildParams, dpopKeyPair, fetchImpl });
   return toTokenSet(response);
 }
 
@@ -141,23 +156,26 @@ export interface ExchangeRefreshTokenArgs {
  */
 export async function exchangeRefreshToken(args: ExchangeRefreshTokenArgs): Promise<TokenSet> {
   const fetchImpl = args.fetchImpl ?? fetch;
-  const assertionParams = await buildClientAssertionParams(
-    args.config.clientId,
-    args.config.clientAuthentication,
-    args.assertionAudience,
-  );
-  const params = new URLSearchParams({
-    grant_type: "refresh_token",
-    client_id: args.config.clientId,
-    refresh_token: args.refreshToken,
-    ...assertionParams,
-  });
+
+  const buildParams = async () => {
+    const assertionParams = await buildClientAssertionParams(
+      args.config.clientId,
+      args.config.clientAuthentication,
+      args.assertionAudience,
+    );
+    return new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: args.config.clientId,
+      refresh_token: args.refreshToken,
+      ...assertionParams,
+    });
+  };
 
   const dpopKeyPair = args.config.dpop === false
     ? undefined
     : args.dpopKeyPair ?? await generateDpopKeyPair();
 
-  const response = await postToken({ tokenEndpoint: args.tokenEndpoint, params, dpopKeyPair, fetchImpl });
+  const response = await postToken({ tokenEndpoint: args.tokenEndpoint, buildParams, dpopKeyPair, fetchImpl });
   const tokenSet = toTokenSet(response);
   // Some servers omit refresh_token on renewal, meaning "unchanged" -- carry the old one forward.
   if (!tokenSet.refreshToken) tokenSet.refreshToken = args.refreshToken;
