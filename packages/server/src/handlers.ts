@@ -11,6 +11,7 @@ import {
   pushAuthorizationRequest,
   verifyJwt,
   OAuthError,
+  TokenExchangeError,
   type AuthenticatedUser,
   type OAuthClientConfig,
   type OidcDiscoveryDocument,
@@ -130,17 +131,36 @@ export function createLoginHandler(config: OAuthHandlersConfig) {
   };
 }
 
+/**
+ * Redirects off the (code-bearing, single-use) callback URL on failure, the
+ * same way the success path already redirects to `returnTo` -- never render
+ * an error directly on `/auth/callback?code=...`. Leaving the browser parked
+ * there means a plain reload resubmits the already-spent `code`, which the
+ * AS then (correctly) rejects a second time as `invalid_grant`, forever,
+ * until the user manually navigates elsewhere.
+ */
+function redirectToReturnToWithError(requestUrl: URL, returnTo: string, errorCode: string): Response {
+  const target = new URL(returnTo, requestUrl);
+  target.searchParams.set("login_error", errorCode);
+  return new Response(null, {
+    status: 302,
+    headers: { Location: target.toString(), "Set-Cookie": clearPkceStateHeader() },
+  });
+}
+
 export function createCallbackHandler(config: OAuthHandlersConfig) {
   return async function callbackHandler(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const pkce = await readPkceState(request, config.session.password);
+    const fallbackReturnTo = pkce?.returnTo ?? config.defaultReturnTo ?? "/";
+
     const error = url.searchParams.get("error");
-    if (error) return new Response(`OAuth error: ${error}`, { status: 400 });
+    if (error) return redirectToReturnToWithError(url, fallbackReturnTo, error);
 
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    const pkce = await readPkceState(request, config.session.password);
     if (!code || !state || !pkce || state !== pkce.state) {
-      return new Response("Invalid or expired OAuth state -- restart login.", { status: 400 });
+      return redirectToReturnToWithError(url, fallbackReturnTo, "invalid_state");
     }
 
     const discovery = await resolveDiscovery(config);
@@ -174,8 +194,11 @@ export function createCallbackHandler(config: OAuthHandlersConfig) {
 
       return new Response(null, { status: 302, headers });
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Unknown error";
-      return new Response(`Login failed: ${message}`, { status: 400, headers: { "Set-Cookie": clearPkceStateHeader() } });
+      // Prefer the AS's own OAuth error code (e.g. "invalid_grant") over the
+      // full exception message -- short, stable, safe to put in a URL query
+      // param; the full message may embed the AS's free-text error_description.
+      const errorCode = cause instanceof TokenExchangeError ? cause.error ?? "login_failed" : "login_failed";
+      return redirectToReturnToWithError(url, pkce.returnTo, errorCode);
     }
   };
 }

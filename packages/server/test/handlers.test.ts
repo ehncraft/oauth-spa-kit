@@ -276,30 +276,50 @@ describe("createCallbackHandler", () => {
     expect(body.user).toMatchObject({ sub: "user-1" });
   });
 
-  it("rejects a mismatched state", async () => {
+  it("rejects a mismatched state by redirecting off the callback URL, not rendering inline", async () => {
     const { config } = await setup();
     const login = createLoginHandler(config);
-    const loginResponse = await login(new Request("https://app.example/auth/login"));
+    const loginResponse = await login(new Request("https://app.example/auth/login?returnTo=/dashboard"));
     const pkceCookie = loginResponse.headers.get("Set-Cookie")!;
 
     const callback = createCallbackHandler(config);
     const response = await callback(
       requestWithCookies("https://app.example/auth/callback?code=valid-code&state=wrong-state", pkceCookie),
     );
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get("Location")!);
+    expect(location.pathname).toBe("/dashboard");
+    expect(location.searchParams.get("login_error")).toBe("invalid_state");
+    expect(response.headers.get("Set-Cookie")).toMatch(/^__oauth_pkce=.*Max-Age=0/);
   });
 
-  it("surfaces an OAuth error param as a 400", async () => {
+  it("surfaces an OAuth error param via redirect, not a 400 rendered on the callback URL", async () => {
     const { config } = await setup();
     const callback = createCallbackHandler(config);
     const response = await callback(new Request("https://app.example/auth/callback?error=access_denied"));
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get("Location")!);
+    expect(location.pathname).toBe(config.defaultReturnTo);
+    expect(location.searchParams.get("login_error")).toBe("access_denied");
   });
 
-  it("rejects a token exchange for an invalid code", async () => {
+  it("rejects a token exchange for an invalid code by redirecting to returnTo with the AS's error code", async () => {
     const { config } = await setup();
     const { callbackResponse } = await loginAndCallback(config, "wrong-code");
-    expect(callbackResponse.status).toBe(400);
+    expect(callbackResponse.status).toBe(302);
+    const location = new URL(callbackResponse.headers.get("Location")!);
+    expect(location.pathname).toBe("/dashboard");
+    expect(location.searchParams.get("login_error")).toBeTruthy();
+    expect(callbackResponse.headers.get("Set-Cookie")).toMatch(/^__oauth_pkce=.*Max-Age=0/);
+  });
+
+  it("does not leave the code-bearing callback URL as the redirect target on failure", async () => {
+    // The whole point of redirecting on failure: a reload after landing on
+    // the post-redirect URL must not resubmit the already-consumed code.
+    const { config } = await setup();
+    const { callbackResponse } = await loginAndCallback(config, "wrong-code");
+    const location = new URL(callbackResponse.headers.get("Location")!);
+    expect(location.searchParams.has("code")).toBe(false);
   });
 });
 
