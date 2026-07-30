@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSessionClient } from "@oauth-spa-kit/core";
 
 // `login()` and `logout()` both navigate via `window.location`, which needs a
@@ -61,5 +61,92 @@ describe("createSessionClient", () => {
 
     await client.refresh();
     expect(seen).toEqual([]);
+  });
+
+  it("refresh() carries the device label through from /auth/session", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ user: { sub: "u1" }, device: "Chrome on macOS" }));
+    const client = createSessionClient({ fetchImpl });
+
+    await client.refresh();
+    expect(client.getState().device).toBe("Chrome on macOS");
+  });
+});
+
+// Liveness polling only starts when `window` exists (it's a browser-only feature -- these tests
+// run under vitest's default Node environment, which has no window global by default, so a
+// minimal stub is enough to opt the client under test into the polling branch without pulling
+// in a full DOM environment).
+describe("createSessionClient liveness polling", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("window", {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not poll when livenessCheckIntervalMs is not set", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ user: { sub: "u1" } }));
+    createSessionClient({ fetchImpl });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("does not poll while logged out", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ user: null }, 401));
+    const client = createSessionClient({ fetchImpl, livenessCheckIntervalMs: 1000 });
+    await client.refresh(); // still logged out afterwards
+
+    await vi.advanceTimersByTimeAsync(5000);
+    // Only the refresh() call itself, no liveness calls on top.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs the session out after two consecutive liveness failures, not one", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ user: { sub: "u1" } })) // refresh()
+      .mockResolvedValue(new Response(null, { status: 401 })); // every liveness poll after
+    const onSessionExpired = vi.fn();
+    const client = createSessionClient({ fetchImpl, livenessCheckIntervalMs: 1000, onSessionExpired });
+    await client.refresh();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.getState().loggedIn).toBe(true);
+    expect(onSessionExpired).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.getState()).toEqual({ ready: true, loggedIn: false, user: null });
+    expect(onSessionExpired).toHaveBeenCalledOnce();
+  });
+
+  it("a single transient failure does not log the session out", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ user: { sub: "u1" } })) // refresh()
+      .mockRejectedValueOnce(new Error("network blip")) // 1st poll
+      .mockResolvedValue(new Response(null, { status: 200 })); // recovers
+    const onSessionExpired = vi.fn();
+    const client = createSessionClient({ fetchImpl, livenessCheckIntervalMs: 1000, onSessionExpired });
+    await client.refresh();
+
+    await vi.advanceTimersByTimeAsync(1000); // failure #1
+    await vi.advanceTimersByTimeAsync(1000); // recovers, resets the counter
+    await vi.advanceTimersByTimeAsync(1000); // healthy poll
+
+    expect(client.getState().loggedIn).toBe(true);
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it("polls the configured livenessPath", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ user: { sub: "u1" } }))
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const client = createSessionClient({ fetchImpl, livenessCheckIntervalMs: 1000, livenessPath: "/custom/liveness" });
+    await client.refresh();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchImpl.mock.calls[1][0]).toBe("/custom/liveness");
   });
 });

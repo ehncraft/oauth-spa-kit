@@ -9,6 +9,7 @@ import {
   fetchJwks,
   generateDpopKeyPair,
   importDpopKeyPair,
+  parseUserAgent,
   pushAuthorizationRequest,
   verifyJwt,
   OAuthError,
@@ -197,11 +198,12 @@ export function createCallbackHandler(config: OAuthHandlersConfig) {
       });
 
       const user = await verifyIdToken(tokens.idToken, discovery, config, pkce.nonce);
+      const device = parseUserAgent(request.headers.get("user-agent"));
 
       const headers = new Headers({ Location: pkce.returnTo });
       headers.append(
         "Set-Cookie",
-        await writeSessionHeader({ tokens, user, dpopKeyPair: pkce.dpopKeyPair }, config.session),
+        await writeSessionHeader({ tokens, user, dpopKeyPair: pkce.dpopKeyPair, device }, config.session),
       );
       headers.append("Set-Cookie", clearPkceStateHeader());
 
@@ -232,7 +234,7 @@ export function createSessionHandler(config: OAuthHandlersConfig) {
       && session.tokens.expiresAt - Date.now() < thresholdMs;
 
     if (!expiringSoon) {
-      return new Response(JSON.stringify({ user: session.user }), {
+      return new Response(JSON.stringify({ user: session.user, device: session.device }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -257,7 +259,7 @@ export function createSessionHandler(config: OAuthHandlersConfig) {
         fetchImpl: config.fetchImpl,
       });
       const setCookie = await writeSessionHeader(session, config.session);
-      return new Response(JSON.stringify({ user: session.user }), {
+      return new Response(JSON.stringify({ user: session.user, device: session.device }), {
         status: 200,
         headers: { "content-type": "application/json", "Set-Cookie": setCookie },
       });
@@ -399,4 +401,39 @@ export async function getUserInfo(
   }
 
   return { claims: (await response.json()) as Record<string, unknown>, setCookie: auth.setCookie };
+}
+
+/**
+ * For a background liveness-polling loop (e.g. `@oauth-spa-kit/core`'s
+ * `createSessionClient` with `livenessCheckIntervalMs` set): a lightweight
+ * `{ alive: boolean }` check that, unlike `/auth/session`, always makes a
+ * real round trip to the AS's userinfo_endpoint via `getUserInfo` rather than
+ * just inspecting the locally stored token expiry -- so it also catches a
+ * session that's been revoked or an account that's been deactivated
+ * server-side, mid-session, before the access token itself would expire.
+ */
+export function createLivenessHandler(config: OAuthHandlersConfig) {
+  return async function livenessHandler(request: Request): Promise<Response> {
+    let result: UserInfoResult | null;
+    try {
+      result = await getUserInfo(request, config);
+    } catch (cause) {
+      const headers = new Headers({ "content-type": "application/json" });
+      if (cause instanceof TokenExchangeError) {
+        headers.append("Set-Cookie", clearSessionHeader(config.session));
+      }
+      return new Response(JSON.stringify({ alive: false }), { status: 401, headers });
+    }
+
+    if (!result) {
+      return new Response(JSON.stringify({ alive: false }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    const headers = new Headers({ "content-type": "application/json" });
+    if (result.setCookie) headers.append("Set-Cookie", result.setCookie);
+    return new Response(JSON.stringify({ alive: true }), { status: 200, headers });
+  };
 }

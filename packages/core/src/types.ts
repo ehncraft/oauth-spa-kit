@@ -92,4 +92,6 @@ export interface SessionState {
   ready: boolean;
   loggedIn: boolean;
   user: AuthenticatedUser | null;
+  /** This device's friendly label ("Chrome on macOS"), captured at sign-in. Undefined if not logged in or not captured. */
+  device?: string;
 }

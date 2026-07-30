@@ -8,6 +8,7 @@ import {
 } from "@oauth-spa-kit/core";
 import {
   createCallbackHandler,
+  createLivenessHandler,
   createLoginHandler,
   createLogoutHandler,
   createSessionHandler,
@@ -16,7 +17,7 @@ import {
   type OAuthHandlersConfig,
 } from "../src/handlers";
 import { readPkceState } from "../src/pkceState";
-import { requestWithCookies } from "./testUtils";
+import { requestWithCookies, toCookieHeader } from "./testUtils";
 
 /** Real shape of every `fetchImpl` call in this file's mocks -- avoids re-annotating a mismatched tuple at every call site. */
 type FetchCall = [string, { headers: Record<string, string>; body?: string }];
@@ -172,7 +173,11 @@ async function setup(
 }
 
 /** Drives login -> callback and returns the resulting session Set-Cookie. */
-async function loginAndCallback(config: OAuthHandlersConfig, code = "valid-code") {
+async function loginAndCallback(
+  config: OAuthHandlersConfig,
+  code = "valid-code",
+  extraHeaders: Record<string, string> = {},
+) {
   const login = createLoginHandler(config);
   const loginResponse = await login(new Request("https://app.example/auth/login?returnTo=/dashboard"));
   const pkceCookie = loginResponse.headers.get("Set-Cookie")!;
@@ -181,9 +186,9 @@ async function loginAndCallback(config: OAuthHandlersConfig, code = "valid-code"
   const state = new URLSearchParams(await extractPushedParams(config)).get("state");
 
   const callback = createCallbackHandler(config);
-  const callbackRequest = requestWithCookies(
+  const callbackRequest = new Request(
     `https://app.example/auth/callback?code=${code}&state=${state}`,
-    pkceCookie,
+    { headers: { Cookie: toCookieHeader(pkceCookie), ...extraHeaders } },
   );
   const callbackResponse = await callback(callbackRequest);
   return { loginResponse, loginUrl, callbackResponse };
@@ -343,6 +348,19 @@ describe("createCallbackHandler", () => {
     const { callbackResponse } = await loginAndCallback(config, "wrong-code");
     const location = new URL(callbackResponse.headers.get("Location")!);
     expect(location.searchParams.has("code")).toBe(false);
+  });
+
+  it("captures a friendly device label from the callback request's User-Agent", async () => {
+    const { config } = await setup();
+    const { callbackResponse } = await loginAndCallback(config, "valid-code", {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    });
+    const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
+
+    const session = createSessionHandler(config);
+    const response = await session(requestWithCookies("https://app.example/auth/session", sessionCookie));
+    const body = await response.json();
+    expect(body.device).toBe("Chrome on macOS");
   });
 
   it("calls onCallbackError with the raw cause, not just the collapsed error code", async () => {
@@ -550,5 +568,76 @@ describe("getUserInfo", () => {
   it("returns null with no session", async () => {
     const { config } = await setup();
     expect(await getUserInfo(new Request("https://app.example/api/me"), config)).toBeNull();
+  });
+});
+
+describe("createLivenessHandler", () => {
+  it("returns { alive: true } for a healthy session, making a real round trip to userinfo_endpoint", async () => {
+    const { config, fetchImpl } = await setup();
+    const { callbackResponse } = await loginAndCallback(config);
+    const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
+    fetchImpl.mockClear();
+
+    const liveness = createLivenessHandler(config);
+    const response = await liveness(requestWithCookies("https://app.example/auth/liveness", sessionCookie));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ alive: true });
+    const userinfoEndpoint = config.oauth.discoveryDocument!.userinfo_endpoint;
+    expect(fetchImpl).toHaveBeenCalledWith(userinfoEndpoint, expect.anything());
+  });
+
+  it("returns { alive: false } with no session", async () => {
+    const { config } = await setup();
+    const liveness = createLivenessHandler(config);
+    const response = await liveness(new Request("https://app.example/auth/liveness"));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ alive: false });
+  });
+
+  it("returns { alive: false } and clears the session when the refresh token was revoked", async () => {
+    const { config } = await setup();
+    const { writeSessionHeader } = await import("../src/session");
+    const setCookie = await writeSessionHeader(
+      { tokens: { accessToken: "at", tokenType: "DPoP", expiresAt: Date.now() - 1000, refreshToken: "revoked-rt" }, user: { sub: "u1" } },
+      config.session,
+    );
+
+    const liveness = createLivenessHandler({ ...config, refreshThresholdSeconds: 999_999 });
+    const response = await liveness(requestWithCookies("https://app.example/auth/liveness", setCookie));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ alive: false });
+    expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0");
+  });
+
+  it("returns { alive: false } without clearing the session when the AS itself rejects the access token (e.g. transient 5xx)", async () => {
+    const { config, fetchImpl } = await setup();
+    const { callbackResponse } = await loginAndCallback(config);
+    const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
+    fetchImpl.mockImplementationOnce(async () => new Response(null, { status: 401 }));
+
+    const liveness = createLivenessHandler(config);
+    const response = await liveness(requestWithCookies("https://app.example/auth/liveness", sessionCookie));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ alive: false });
+    expect(response.headers.get("Set-Cookie")).toBeNull();
+  });
+
+  it("forwards a refreshed Set-Cookie when the access token was expiring", async () => {
+    const { config } = await setup();
+    const { writeSessionHeader } = await import("../src/session");
+    const setCookie = await writeSessionHeader(
+      { tokens: { accessToken: "at-old", tokenType: "DPoP", expiresAt: Date.now() - 1000, refreshToken: "rt-1" }, user: { sub: "u1" } },
+      config.session,
+    );
+
+    const liveness = createLivenessHandler({ ...config, refreshThresholdSeconds: 999_999 });
+    const response = await liveness(requestWithCookies("https://app.example/auth/liveness", setCookie));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Set-Cookie")).toBeTruthy();
   });
 });

@@ -23,21 +23,28 @@ import { AuthProvider, useAuth } from "@oauth-spa-kit/react";
 
 function App() {
   return (
-    <AuthProvider baseUrl="/auth">
+    <AuthProvider
+      baseUrl="/auth"
+      // Optional: background-poll GET /auth/liveness so a session revoked or
+      // an account deactivated server-side ends this tab's session promptly,
+      // not just on the next navigation. Off by default.
+      livenessCheckIntervalMs={60_000}
+      onSessionExpired={() => window.location.assign("/auth/login")}
+    >
       <Dashboard />
     </AuthProvider>
   );
 }
 
 function Dashboard() {
-  const { ready, loggedIn, user, login, logout } = useAuth();
+  const { ready, loggedIn, user, device, login, logout } = useAuth();
 
   if (!ready) return null;
   if (!loggedIn) return <button onClick={() => login("/dashboard")}>Log in</button>;
 
   return (
     <>
-      <p>Signed in as {user?.name}</p>
+      <p>Signed in as {user?.name} on {device}</p>
       <button onClick={() => void logout()}>Log out</button>
     </>
   );
@@ -47,7 +54,8 @@ function Dashboard() {
 `<AuthProvider>` fetches `/auth/session` on mount and never holds an access
 or refresh token in the browser -- `useAuth()` is a thin
 `useSyncExternalStore` view over that same state, kept in sync across tabs
-via `BroadcastChannel`.
+via `BroadcastChannel`. `device` is a best-effort label ("Chrome on macOS")
+the server package parses from the `User-Agent` at sign-in.
 
 ## License
 

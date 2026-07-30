@@ -7,6 +7,8 @@ export interface StoredSession {
   user: AuthenticatedUser;
   /** The exact key pair the tokens are DPoP-bound to -- reused for every refresh. Absent only if `config.oauth.dpop === false`. */
   dpopKeyPair?: SerializedDpopKeyPair;
+  /** This device's friendly label ("Chrome on macOS"), parsed from the callback request's User-Agent at sign-in. */
+  device?: string;
 }
 
 export interface SessionConfig {

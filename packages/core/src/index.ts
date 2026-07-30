@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./device.js";
 export * from "./errors.js";
 export * from "./base64url.js";
 export * from "./pkce.js";

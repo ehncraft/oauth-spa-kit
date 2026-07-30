@@ -29,16 +29,27 @@ for framework bindings, which both build on this package's
 ```ts
 import { createSessionClient } from "@oauth-spa-kit/core";
 
-const client = createSessionClient({ baseUrl: "/auth" });
+const client = createSessionClient({
+  baseUrl: "/auth",
+  // Optional: poll GET /auth/liveness in the background so a session
+  // revoked or an account deactivated server-side ends this tab's session
+  // promptly, not just on the next navigation. Off by default.
+  livenessCheckIntervalMs: 60_000,
+  onSessionExpired: () => client.login(),
+});
 
 client.subscribe((state) => {
-  // state.ready, state.loggedIn, state.user
+  // state.ready, state.loggedIn, state.user, state.device
 });
 
 await client.refresh(); // GET /auth/session
 client.login("/dashboard"); // full-page redirect, no silent/iframe path
 await client.logout();
 ```
+
+`state.device` is a best-effort label ("Chrome on macOS") the server
+package parses from the `User-Agent` at sign-in via `parseUserAgent()`,
+also exported from this package -- useful for "you're signed in on X" UI.
 
 The lower-level protocol primitives (`createPkceParams`,
 `discoverOidcConfiguration`, `pushAuthorizationRequest`,
