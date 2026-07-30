@@ -25,6 +25,7 @@ import {
   createCallbackHandler,
   createSessionHandler,
   createLogoutHandler,
+  createLivenessHandler,
   getAuthorizationHeader,
   getUserInfo,
   type OAuthHandlersConfig,
@@ -48,11 +49,13 @@ const config: OAuthHandlersConfig = {
 };
 
 // Each returns a plain (Request) => Promise<Response> -- mount at
-// GET /auth/login, GET /auth/callback, GET /auth/session, POST /auth/logout.
+// GET /auth/login, GET /auth/callback, GET /auth/session, POST /auth/logout,
+// GET /auth/liveness (optional -- see below).
 export const login = createLoginHandler(config);
 export const callback = createCallbackHandler(config);
 export const session = createSessionHandler(config);
 export const logout = createLogoutHandler(config);
+export const liveness = createLivenessHandler(config);
 
 // From any other API route that needs to call an upstream resource server:
 const authHeader = await getAuthorizationHeader(request, config);
@@ -64,8 +67,17 @@ if (info) console.log(info.claims); // raw claims, shape depends on your granted
 ```
 
 The SPA never sees an access or refresh token -- only `GET /auth/session`'s
-`{ user }` response, backed by a sealed cookie the browser can't read or
-exfiltrate via JS. See
+`{ user, device }` response, backed by a sealed cookie the browser can't
+read or exfiltrate via JS. `device` is a best-effort label ("Chrome on
+macOS") parsed from the callback request's `User-Agent` at sign-in --
+useful for "you're signed in on X" UI, not a fingerprinting mechanism.
+
+`createLivenessHandler` mounts a lightweight `GET /auth/liveness` that
+returns `{ alive: boolean }`, backed by `getUserInfo` -- meant to be polled
+on an interval from `@oauth-spa-kit/core`'s `createSessionClient`
+(`livenessCheckIntervalMs`) so a session revoked or an account deactivated
+server-side ends the SPA's session promptly, not just on the next
+navigation. See
 [`@oauth-spa-kit/core`](https://www.npmjs.com/package/@oauth-spa-kit/core)
 for the lower-level protocol primitives these handlers are built from, and
 [`@oauth-spa-kit/react`](https://www.npmjs.com/package/@oauth-spa-kit/react)

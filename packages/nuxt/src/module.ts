@@ -40,6 +40,17 @@ export interface ModuleOptions {
    * signal, not just dev noise). Set to `false` to opt out.
    */
   logCallbackErrors?: boolean;
+  /** Browser-side session-client behavior. Unlike `oauth`/`session`, this reaches the client bundle -- keep it free of secrets. */
+  client?: {
+    /**
+     * Interval (ms) for a background `/auth/liveness` poll, on top of the normal
+     * navigation-triggered session check. Off by default. When a poll confirms the session
+     * is actually dead, `useAuth()` redirects straight to `login()` -- see
+     * `createSessionClient`'s `onSessionExpired` in `@oauth-spa-kit/core` for why this needs
+     * a real round trip to the AS rather than just checking local token expiry.
+     */
+    livenessCheckIntervalMs?: number;
+  };
 }
 
 // Nuxt's own RuntimeConfig has no knowledge of this module's shape by
@@ -49,6 +60,9 @@ export interface ModuleOptions {
 declare module "@nuxt/schema" {
   interface RuntimeConfig {
     oauthSpaKit: ModuleOptions;
+  }
+  interface PublicRuntimeConfig {
+    oauthSpaKit: { livenessCheckIntervalMs?: number };
   }
 }
 
@@ -68,11 +82,16 @@ export default defineNuxtModule<ModuleOptions>({
       nuxt.options.runtimeConfig.oauthSpaKit,
       options,
     );
+    nuxt.options.runtimeConfig.public.oauthSpaKit = defu(
+      nuxt.options.runtimeConfig.public.oauthSpaKit,
+      { livenessCheckIntervalMs: options.client?.livenessCheckIntervalMs },
+    ) as { livenessCheckIntervalMs?: number };
 
     addServerHandler({ route: "/auth/login", handler: resolver.resolve("./runtime/server/routes/auth/login.get") });
     addServerHandler({ route: "/auth/callback", handler: resolver.resolve("./runtime/server/routes/auth/callback.get") });
     addServerHandler({ route: "/auth/session", handler: resolver.resolve("./runtime/server/routes/auth/session.get") });
     addServerHandler({ route: "/auth/logout", handler: resolver.resolve("./runtime/server/routes/auth/logout.get") });
+    addServerHandler({ route: "/auth/liveness", handler: resolver.resolve("./runtime/server/routes/auth/liveness.get") });
 
     addImports({ name: "useAuth", from: resolver.resolve("./runtime/app/composables/useAuth") });
     addPlugin(resolver.resolve("./runtime/app/plugins/session.client"));

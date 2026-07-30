@@ -19,6 +19,25 @@ export interface SessionClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   channelName?: string;
+  /**
+   * Interval (ms) for a background liveness check against `livenessPath`, on top of the
+   * normal navigation-triggered `refresh()` calls. Off by default -- opt in only if you need
+   * to react to a session dying (revoked access, deactivated account) *before* the user's next
+   * navigation. Unlike `/auth/session` (which only inspects the local cookie/token expiry),
+   * the liveness check makes a real round trip to the AS, so it also catches "token still
+   * technically unexpired but the account was just deactivated or the session was revoked
+   * elsewhere" -- not just token expiry, which is already handled reactively.
+   */
+  livenessCheckIntervalMs?: number;
+  /** Same-origin path for the liveness check. Defaults to `/auth/liveness`. */
+  livenessPath?: string;
+  /**
+   * Called once a liveness check confirms the session is actually dead (after two consecutive
+   * failures, to ride out a single transient network blip rather than force-logging someone
+   * out over it). `state.loggedIn` is already flipped to `false` before this fires -- use it
+   * for anything beyond reactive state, e.g. redirecting straight to `login()`.
+   */
+  onSessionExpired?: () => void;
 }
 
 export interface SessionClient {
@@ -46,9 +65,13 @@ export interface SessionClient {
 
 const initialState: SessionState = { ready: false, loggedIn: false, user: null };
 
+/** Consecutive liveness-check failures required before treating a session as actually dead. */
+const LIVENESS_FAILURE_THRESHOLD = 2;
+
 export function createSessionClient(options: SessionClientOptions = {}): SessionClient {
   const baseUrl = options.baseUrl ?? "";
   const fetchImpl = options.fetchImpl ?? fetch;
+  const livenessPath = options.livenessPath ?? "/auth/liveness";
   const channel = typeof BroadcastChannel !== "undefined"
     ? new BroadcastChannel(options.channelName ?? "oauth-spa-kit")
     : null;
@@ -72,8 +95,8 @@ export function createSessionClient(options: SessionClientOptions = {}): Session
         return;
       }
       if (!response.ok) throw new Error(`/auth/session returned ${response.status}`);
-      const body = await response.json() as { user: SessionState["user"] };
-      setState({ ready: true, loggedIn: Boolean(body.user), user: body.user ?? null });
+      const body = await response.json() as { user: SessionState["user"]; device?: string };
+      setState({ ready: true, loggedIn: Boolean(body.user), user: body.user ?? null, device: body.device });
     } catch {
       setState({ ready: true, loggedIn: false, user: null });
     }
@@ -82,6 +105,41 @@ export function createSessionClient(options: SessionClientOptions = {}): Session
   channel?.addEventListener("message", (event) => {
     if (event.data === "session-changed") void refresh();
   });
+
+  if (typeof window !== "undefined" && options.livenessCheckIntervalMs) {
+    let consecutiveFailures = 0;
+    setInterval(() => {
+      void (async () => {
+        // Nothing to check liveness of yet -- the navigation-triggered refresh() is what
+        // notices a fresh sign-in and flips this back on.
+        if (!state.loggedIn) return;
+
+        let alive: boolean;
+        try {
+          const response = await fetchImpl(`${baseUrl}${livenessPath}`, {
+            headers: { accept: "application/json" },
+            credentials: "same-origin",
+          });
+          alive = response.ok;
+        } catch {
+          alive = false;
+        }
+
+        if (alive) {
+          consecutiveFailures = 0;
+          return;
+        }
+
+        consecutiveFailures += 1;
+        if (consecutiveFailures < LIVENESS_FAILURE_THRESHOLD) return;
+
+        consecutiveFailures = 0;
+        setState({ ready: true, loggedIn: false, user: null });
+        channel?.postMessage("session-changed");
+        options.onSessionExpired?.();
+      })();
+    }, options.livenessCheckIntervalMs);
+  }
 
   return {
     getState: () => state,

@@ -77,7 +77,8 @@ packages/
             browser AND inside the server package below.
   server/   BFF: sealed-cookie session + createLoginHandler /
             createCallbackHandler / createSessionHandler /
-            createLogoutHandler / getAuthorizationHeader / getUserInfo.
+            createLogoutHandler / createLivenessHandler /
+            getAuthorizationHeader / getUserInfo.
             Handlers are plain `(Request) => Promise<Response>` -- deploy on Nitro,
             Next.js route handlers, Cloudflare Workers, or Node via a small
             adapter. Also exposes an OpenID AuthZEN Authorization API
@@ -117,16 +118,18 @@ you're not inside Nitro.
    (`authorization_code` grant, PKCE-verified, `private_key_jwt`-
    authenticated), verifies the `id_token`'s signature against the AS's
    JWKS and its `iss`/`aud`/`nonce`/`exp` claims (OIDC Core section
-   3.1.3.7) before trusting anything in it, seals `{ tokens, user,
-   dpopKeyPair }` into the session cookie, redirects to `returnTo`.
-3. `GET /auth/session` -- returns `{ user }` (never tokens). If the access
-   token is within `refreshThresholdSeconds` (default 60s, same default
-   `oidc-client-ts` uses) of expiry, refreshes server-side first via the
-   `refresh_token` grant -- reusing the same DPoP key the tokens were bound
-   to, since a DPoP-bound refresh token must be renewed with the key that
-   obtained it -- and re-seals the cookie. If refresh fails (token revoked,
-   rotated-and-reused, IdP down), returns 401 and clears the cookie -- no
-   silently-stale "authenticated" state.
+   3.1.3.7) before trusting anything in it, parses a friendly device label
+   ("Chrome on macOS") from the request's `User-Agent`, seals `{ tokens,
+   user, dpopKeyPair, device }` into the session cookie, redirects to
+   `returnTo`.
+3. `GET /auth/session` -- returns `{ user, device }` (never tokens). If the
+   access token is within `refreshThresholdSeconds` (default 60s, same
+   default `oidc-client-ts` uses) of expiry, refreshes server-side first via
+   the `refresh_token` grant -- reusing the same DPoP key the tokens were
+   bound to, since a DPoP-bound refresh token must be renewed with the key
+   that obtained it -- and re-seals the cookie. If refresh fails (token
+   revoked, rotated-and-reused, IdP down), returns 401 and clears the
+   cookie -- no silently-stale "authenticated" state.
 4. `POST /auth/logout` -- clears the cookie, optionally redirects through
    the IdP's `end_session_endpoint` (RP-Initiated Logout) if configured.
 5. App API routes that need to call an upstream resource server call
@@ -137,6 +140,14 @@ you're not inside Nitro.
    needs, returning the raw claims -- the current profile can change
    between login and any later request, so this hits `userinfo_endpoint`
    rather than trusting the `id_token`'s point-in-time snapshot.
+6. `GET /auth/liveness` (optional) -- a lightweight `{ alive: boolean }`
+   check backed by `getUserInfo`, so it also makes a real round trip to the
+   AS rather than just inspecting the locally stored token expiry. Meant to
+   be polled in the background (`createSessionClient`'s
+   `livenessCheckIntervalMs`) so a session that's been revoked, or an
+   account that's been deactivated, ends the SPA's session promptly instead
+   of only on the user's next navigation -- token-expiry alone is already
+   handled reactively by step 3 and doesn't need this.
 
 No hidden iframe / `prompt=none` silent-renew path exists here, unlike
 `oidc-client-ts`'s iframe fallback -- third-party cookie restrictions
