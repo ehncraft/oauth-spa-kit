@@ -28,6 +28,19 @@ export interface SessionClient {
   refresh(): Promise<void>;
   /** Full-page navigation to the login handler -- there is no silent/iframe path in BFF mode. */
   login(returnTo?: string): void;
+  /**
+   * Full-page navigation to the logout handler, same as `login`. RP-Initiated Logout
+   * (OIDC section 5) redirects the browser to the IdP's `end_session_endpoint`, which is
+   * a *different origin* from this app -- clearing/invalidating that session requires the
+   * IdP's own session cookie to actually be sent there and its response cookie actually
+   * stored, and browsers only do that for a real top-level navigation, not a `fetch()`
+   * (even with `redirect: "follow"`, `credentials: "same-origin"` scopes cookie handling
+   * to same-origin hops only, so the cross-origin hop to the IdP carries no cookie either
+   * way). A fetch-based logout silently no-ops the IdP side: the local session clears, but
+   * the IdP's SSO cookie survives, so the very next login silently re-authenticates through
+   * it. Stays `Promise<void>` for call-site compatibility even though the navigation means
+   * it never meaningfully resolves.
+   */
   logout(): Promise<void>;
 }
 
@@ -83,9 +96,8 @@ export function createSessionClient(options: SessionClientOptions = {}): Session
       window.location.assign(url.toString());
     },
     async logout() {
-      await fetchImpl(`${baseUrl}/auth/logout`, { method: "POST", credentials: "same-origin" });
-      setState({ ready: true, loggedIn: false, user: null });
-      channel?.postMessage("session-changed");
+      const url = new URL(`${baseUrl}/auth/logout`, window.location.origin);
+      window.location.assign(url.toString());
     },
   };
 }

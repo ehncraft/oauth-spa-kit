@@ -63,7 +63,7 @@ export default {
     if (url.pathname === "/auth/login") return login(request);
     if (url.pathname === "/auth/callback") return callback(request);
     if (url.pathname === "/auth/session") return session(request);
-    if (url.pathname === "/auth/logout" && request.method === "POST") return logout(request);
+    if (url.pathname === "/auth/logout") return logout(request);
     return new Response("Not found", { status: 404 });
   },
 };

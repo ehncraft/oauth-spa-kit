@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSessionClient } from "@oauth-spa-kit/core";
 
-// `login()` navigates via `window.location`, which needs a DOM environment
-// this package intentionally doesn't depend on for its unit tests (kept to
-// plain Node -- see vitest.config.ts). Covered here: everything that goes
-// through `fetch`/`BroadcastChannel`, i.e. `refresh()`, `logout()`, and
-// subscriber notification.
+// `login()` and `logout()` both navigate via `window.location`, which needs a
+// DOM environment this package intentionally doesn't depend on for its unit
+// tests (kept to plain Node -- see vitest.config.ts). Covered here:
+// everything that goes through `fetch`/`BroadcastChannel`, i.e. `refresh()`
+// and subscriber notification.
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -50,21 +50,6 @@ describe("createSessionClient", () => {
 
     await client.refresh();
     expect(seen).toEqual([true]);
-  });
-
-  it("logout() clears state and POSTs to /auth/logout", async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ user: { sub: "u1" } }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }));
-    const client = createSessionClient({ fetchImpl });
-
-    await client.refresh();
-    expect(client.getState().loggedIn).toBe(true);
-
-    await client.logout();
-    expect(client.getState()).toEqual({ ready: true, loggedIn: false, user: null });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/auth/logout");
-    expect(fetchImpl.mock.calls[1][1]).toMatchObject({ method: "POST" });
   });
 
   it("unsubscribe stops further notifications", async () => {

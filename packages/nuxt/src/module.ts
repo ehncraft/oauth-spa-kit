@@ -65,7 +65,7 @@ export default defineNuxtModule<ModuleOptions>({
     addServerHandler({ route: "/auth/login", handler: resolver.resolve("./runtime/server/routes/auth/login.get") });
     addServerHandler({ route: "/auth/callback", handler: resolver.resolve("./runtime/server/routes/auth/callback.get") });
     addServerHandler({ route: "/auth/session", handler: resolver.resolve("./runtime/server/routes/auth/session.get") });
-    addServerHandler({ route: "/auth/logout", method: "post", handler: resolver.resolve("./runtime/server/routes/auth/logout.post") });
+    addServerHandler({ route: "/auth/logout", handler: resolver.resolve("./runtime/server/routes/auth/logout.get") });
 
     addImports({ name: "useAuth", from: resolver.resolve("./runtime/app/composables/useAuth") });
     addPlugin(resolver.resolve("./runtime/app/plugins/session.client"));
