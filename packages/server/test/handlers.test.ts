@@ -410,7 +410,21 @@ describe("createLogoutHandler", () => {
     const location = new URL(response.headers.get("Location")!);
     expect(location.origin + location.pathname).toBe(config.oauth.discoveryDocument!.end_session_endpoint);
     expect(location.searchParams.get("client_id")).toBe("client-1");
+    expect(location.searchParams.has("id_token_hint")).toBe(false);
     expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0");
+  });
+
+  it("includes id_token_hint when a real session exists, so the AS can skip the confirmation prompt", async () => {
+    const { config } = await setup();
+    const { callbackResponse } = await loginAndCallback(config);
+    const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
+
+    const logout = createLogoutHandler(config);
+    const response = await logout(requestWithCookies("https://app.example/auth/logout", sessionCookie));
+
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers.get("Location")!);
+    expect(location.searchParams.get("id_token_hint")).toBeTruthy();
   });
 });
 
