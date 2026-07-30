@@ -1,5 +1,6 @@
 import {
   computeJwkThumbprint,
+  createDpopProof,
   createPkceParams,
   discoverOidcConfiguration,
   exchangeAuthorizationCode,
@@ -340,4 +341,62 @@ export async function getAuthorizationHeader(
   }
 
   return { header: `${session.tokens.tokenType} ${session.tokens.accessToken}` };
+}
+
+export interface UserInfoResult {
+  /** Whatever the AS's userinfo_endpoint returned -- raw, unmapped claims (shape varies per AS/scope grant). */
+  claims: Record<string, unknown>;
+  /** Set only when the access token was refreshed -- forward this Set-Cookie on your outgoing response. */
+  setCookie?: string;
+}
+
+/**
+ * Calls the AS's userinfo_endpoint with the session's (DPoP-bound, if
+ * enabled) access token, refreshing it first if it's expiring soon -- the
+ * id_token is meant to be a thin proof of authentication at login time, not
+ * a source of the current profile, which is why this hits userinfo_endpoint
+ * rather than just decoding the stored id_token.
+ */
+export async function getUserInfo(
+  request: Request,
+  config: OAuthHandlersConfig,
+): Promise<UserInfoResult | null> {
+  const session = await readSession(request, config.session);
+  if (!session) return null;
+
+  const auth = await getAuthorizationHeader(request, config);
+  if (!auth) return null;
+
+  const discovery = await resolveDiscovery(config);
+  if (!discovery.userinfo_endpoint) {
+    throw new OAuthError("Discovery document has no userinfo_endpoint");
+  }
+  const userinfoEndpoint = discovery.userinfo_endpoint;
+
+  const dpopKeyPair = session.dpopKeyPair ? await importDpopKeyPair(session.dpopKeyPair) : undefined;
+  const accessToken = auth.header.slice(auth.header.indexOf(" ") + 1);
+  const fetchImpl = config.fetchImpl ?? fetch;
+
+  async function callUserInfo(nonce?: string): Promise<Response> {
+    const headers: Record<string, string> = { Authorization: auth!.header };
+    if (dpopKeyPair) {
+      headers.DPoP = await createDpopProof({ keyPair: dpopKeyPair, htm: "GET", htu: userinfoEndpoint, accessToken, nonce });
+    }
+    return fetchImpl(userinfoEndpoint, { headers });
+  }
+
+  // DPoP resource endpoints can nonce-challenge the same way the token endpoint does (RFC 9449
+  // section 8), just via WWW-Authenticate/DPoP-Nonce response headers instead of a JSON body --
+  // so this retries once, mirroring the token-endpoint retry in @oauth-spa-kit/core.
+  let response = await callUserInfo();
+  if (response.status === 401 && dpopKeyPair) {
+    const nonce = response.headers.get("DPoP-Nonce");
+    if (nonce) response = await callUserInfo(nonce);
+  }
+
+  if (!response.ok) {
+    throw new OAuthError(`userinfo_endpoint returned ${response.status}`);
+  }
+
+  return { claims: (await response.json()) as Record<string, unknown>, setCookie: auth.setCookie };
 }
