@@ -1,3 +1,10 @@
+## [2.0.4](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.3...v2.0.4) (2026-07-30)
+
+
+### Bug Fixes
+
+* navigate to /auth/logout instead of fetching it ([c1640fb](https://github.com/ehncraft/oauth-spa-kit/commit/c1640fb37ff3b657e161428a6d9a8a1f90e46cce))
+
 ## [2.0.3](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.2...v2.0.3) (2026-07-28)
 
 
