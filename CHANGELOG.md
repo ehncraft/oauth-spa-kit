@@ -1,3 +1,11 @@
+## [2.0.5](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.4...v2.0.5) (2026-07-30)
+
+
+### Bug Fixes
+
+* **nuxt:** log the callback handler's failure cause by default ([3f3872f](https://github.com/ehncraft/oauth-spa-kit/commit/3f3872f9527ac470221767e9c9a326cc7653c47c))
+* **server:** add onCallbackError hook to surface the real callback failure cause ([31123e3](https://github.com/ehncraft/oauth-spa-kit/commit/31123e3133ad4a948c097e76c852dbda3466b2d4))
+
 ## [2.0.4](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.3...v2.0.4) (2026-07-30)
 
 
