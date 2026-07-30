@@ -1,3 +1,10 @@
+## [2.2.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.2.0...v2.2.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* **server:** clear the session cookie on any liveness rejection ([b6c7c3e](https://github.com/ehncraft/oauth-spa-kit/commit/b6c7c3ecc5305c2994c73fee9d427c0f95f8865c))
+
 # [2.2.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.1.0...v2.2.0) (2026-07-30)
 
 
