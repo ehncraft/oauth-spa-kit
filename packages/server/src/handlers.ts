@@ -32,6 +32,18 @@ export interface OAuthHandlersConfig {
   refreshThresholdSeconds?: number;
   defaultReturnTo?: string;
   fetchImpl?: typeof fetch;
+  /**
+   * Called with the raw thrown error whenever the callback handler's token
+   * exchange or id_token verification fails, right before it's collapsed
+   * down to a short, URL-safe error code and redirected to
+   * `returnTo?login_error=...`. The full error (e.g. TokenExchangeError's
+   * `errorDescription`, or a JwtVerificationError's message) is never put in
+   * that URL -- it may embed the AS's free-text description -- so without
+   * this hook the only way to see *why* a login failed is to re-derive it
+   * from the AS's own server-side logs. Optional; defaults to a no-op, so
+   * existing consumers see no behavior change.
+   */
+  onCallbackError?: (error: unknown) => void;
 }
 
 async function resolveDiscovery(config: OAuthHandlersConfig): Promise<OidcDiscoveryDocument> {
@@ -194,6 +206,7 @@ export function createCallbackHandler(config: OAuthHandlersConfig) {
 
       return new Response(null, { status: 302, headers });
     } catch (cause) {
+      config.onCallbackError?.(cause);
       // Prefer the AS's own OAuth error code (e.g. "invalid_grant") over the
       // full exception message -- short, stable, safe to put in a URL query
       // param; the full message may embed the AS's free-text error_description.
