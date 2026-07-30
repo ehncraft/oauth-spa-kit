@@ -321,6 +321,15 @@ describe("createCallbackHandler", () => {
     const location = new URL(callbackResponse.headers.get("Location")!);
     expect(location.searchParams.has("code")).toBe(false);
   });
+
+  it("calls onCallbackError with the raw cause, not just the collapsed error code", async () => {
+    const { config } = await setup();
+    const onCallbackError = vi.fn();
+    const { callbackResponse } = await loginAndCallback({ ...config, onCallbackError }, "wrong-code");
+    expect(callbackResponse.status).toBe(302);
+    expect(onCallbackError).toHaveBeenCalledTimes(1);
+    expect(onCallbackError.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
 });
 
 describe("createSessionHandler refresh", () => {
