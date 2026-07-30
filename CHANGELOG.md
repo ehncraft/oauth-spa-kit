@@ -1,3 +1,10 @@
+## [2.0.6](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.5...v2.0.6) (2026-07-30)
+
+
+### Bug Fixes
+
+* **server:** send id_token_hint on logout ([e4c4254](https://github.com/ehncraft/oauth-spa-kit/commit/e4c425473ab82abc796eb8364a339e3a10ce3c54))
+
 ## [2.0.5](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.4...v2.0.5) (2026-07-30)
 
 
