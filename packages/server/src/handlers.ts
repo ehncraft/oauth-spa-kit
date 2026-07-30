@@ -272,10 +272,16 @@ export function createSessionHandler(config: OAuthHandlersConfig) {
 }
 
 export function createLogoutHandler(config: OAuthHandlersConfig) {
-  // Takes a Request, unused, purely so all four handlers share the same
-  // `(Request) => Promise<Response>` shape for callers that dispatch on a
-  // uniform signature (see examples/react-spa/server.ts).
-  return async function logoutHandler(_request: Request): Promise<Response> {
+  return async function logoutHandler(request: Request): Promise<Response> {
+    // Read before clearing: id_token_hint (OIDC RP-Initiated Logout 1.0 section 2) is what
+    // lets the AS resolve the requesting client and validate/honor post_logout_redirect_uri
+    // without an extra confirmation step -- a bare client_id query param proves nothing (any
+    // page could set it), so an AS that takes client identity seriously only trusts it when
+    // accompanied by the id_token_hint proving this really was that client's session. Without
+    // it, expect the AS to fall back to an interactive "are you sure?" prompt and/or drop
+    // post_logout_redirect_uri entirely instead of honoring it.
+    const session = await readSession(request, config.session);
+
     const headers = new Headers({ "content-type": "application/json" });
     headers.append("Set-Cookie", clearSessionHeader(config.session));
 
@@ -284,6 +290,9 @@ export function createLogoutHandler(config: OAuthHandlersConfig) {
       const endSessionUrl = new URL(discovery.end_session_endpoint);
       endSessionUrl.searchParams.set("client_id", config.oauth.clientId);
       endSessionUrl.searchParams.set("post_logout_redirect_uri", config.oauth.postLogoutRedirectUri);
+      if (session?.tokens.idToken) {
+        endSessionUrl.searchParams.set("id_token_hint", session.tokens.idToken);
+      }
       headers.set("Location", endSessionUrl.toString());
       return new Response(null, { status: 302, headers });
     }
