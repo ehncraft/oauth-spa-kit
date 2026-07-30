@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.1.0...v2.2.0) (2026-07-30)
+
+
+### Features
+
+* proactive session-liveness polling + device label capture ([8351c8f](https://github.com/ehncraft/oauth-spa-kit/commit/8351c8fdea96e48053fc3bc86cb8c0737fe41d85))
+
 # [2.1.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.6...v2.1.0) (2026-07-30)
 
 
