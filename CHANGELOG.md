@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.6...v2.1.0) (2026-07-30)
+
+
+### Features
+
+* **server:** add getUserInfo for the AS's userinfo_endpoint ([c24fe19](https://github.com/ehncraft/oauth-spa-kit/commit/c24fe19fa5b32409481c7674d9f270518687e526))
+
 ## [2.0.6](https://github.com/ehncraft/oauth-spa-kit/compare/v2.0.5...v2.0.6) (2026-07-30)
 
 
