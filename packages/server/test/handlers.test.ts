@@ -612,7 +612,7 @@ describe("createLivenessHandler", () => {
     expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0");
   });
 
-  it("returns { alive: false } without clearing the session when the AS itself rejects the access token (e.g. transient 5xx)", async () => {
+  it("returns { alive: false } and clears the session when the AS itself rejects the access token (e.g. the session backing it was revoked server-side)", async () => {
     const { config, fetchImpl } = await setup();
     const { callbackResponse } = await loginAndCallback(config);
     const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
@@ -623,7 +623,7 @@ describe("createLivenessHandler", () => {
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ alive: false });
-    expect(response.headers.get("Set-Cookie")).toBeNull();
+    expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0");
   });
 
   it("forwards a refreshed Set-Cookie when the access token was expiring", async () => {

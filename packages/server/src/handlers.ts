@@ -417,11 +417,17 @@ export function createLivenessHandler(config: OAuthHandlersConfig) {
     let result: UserInfoResult | null;
     try {
       result = await getUserInfo(request, config);
-    } catch (cause) {
+    } catch {
+      // Any failure here -- a rejected refresh (TokenExchangeError) or the AS's
+      // userinfo_endpoint itself rejecting the access token (OAuthError, e.g. the session
+      // backing it was explicitly revoked server-side) -- means this session is dead. Clear
+      // the local cookie unconditionally rather than only for TokenExchangeError: leaving a
+      // known-dead cookie in place is only harmless because the default Nuxt/React wiring
+      // immediately redirects to a fresh login on `onSessionExpired`: a consumer that
+      // instead just shows a "session expired" message would otherwise keep sending a
+      // cookie doomed to fail every subsequent request.
       const headers = new Headers({ "content-type": "application/json" });
-      if (cause instanceof TokenExchangeError) {
-        headers.append("Set-Cookie", clearSessionHeader(config.session));
-      }
+      headers.append("Set-Cookie", clearSessionHeader(config.session));
       return new Response(JSON.stringify({ alive: false }), { status: 401, headers });
     }
 
