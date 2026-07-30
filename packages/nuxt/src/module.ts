@@ -33,6 +33,13 @@ export interface ModuleOptions {
   };
   session: SessionConfig;
   refreshThresholdSeconds?: number;
+  /**
+   * Logs the callback handler's raw failure cause via `console.error` before
+   * it's collapsed to a short error code in the `login_error` redirect param
+   * -- on by default in every environment (a failed login is a production
+   * signal, not just dev noise). Set to `false` to opt out.
+   */
+  logCallbackErrors?: boolean;
 }
 
 // Nuxt's own RuntimeConfig has no knowledge of this module's shape by
