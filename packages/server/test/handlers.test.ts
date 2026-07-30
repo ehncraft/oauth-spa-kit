@@ -12,6 +12,7 @@ import {
   createLogoutHandler,
   createSessionHandler,
   getAuthorizationHeader,
+  getUserInfo,
   type OAuthHandlersConfig,
 } from "../src/handlers";
 import { readPkceState } from "../src/pkceState";
@@ -46,7 +47,7 @@ function dpopProofJwkX(headers: Headers | Record<string, string>): string | unde
  * "https://as.example" would collide in that cache and verify id_tokens
  * against a stale key from an earlier test.
  */
-async function setupMockAs() {
+async function setupMockAs({ userinfoRequiresNonce = false }: { userinfoRequiresNonce?: boolean } = {}) {
   const asKeyPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   const asPublicJwk = await crypto.subtle.exportKey("jwk", asKeyPair.publicKey);
   const origin = `https://as-${Math.random().toString(36).slice(2)}.example`;
@@ -58,11 +59,13 @@ async function setupMockAs() {
     pushed_authorization_request_endpoint: `${origin}/par`,
     jwks_uri: `${origin}/jwks`,
     end_session_endpoint: `${origin}/logout`,
+    userinfo_endpoint: `${origin}/userinfo`,
   };
 
   let capturedNonce: string | undefined;
   let capturedDpopJkt: string | undefined;
   let refreshCount = 0;
+  let userinfoCallCount = 0;
 
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
@@ -119,15 +122,35 @@ async function setupMockAs() {
       }
     }
 
+    if (url === discovery.userinfo_endpoint) {
+      userinfoCallCount++;
+      if (userinfoRequiresNonce && userinfoCallCount === 1) {
+        return new Response(null, { status: 401, headers: { "DPoP-Nonce": "userinfo-nonce-1" } });
+      }
+      const dpopProof = headers.DPoP;
+      const nonceUsed = dpopProof ? (decodeJwtPart(dpopProof.split(".")[1]).nonce as string | undefined) : undefined;
+      return jsonResponse({
+        sub: "user-1",
+        name: "Ada Lovelace",
+        given_name: "Ada",
+        family_name: "Lovelace",
+        email: "ada@example.com",
+        _dpopNonceUsed: nonceUsed, // smuggled out for assertions only
+      });
+    }
+
     throw new Error(`Unexpected fetch to ${url}`);
   });
 
   return { discovery, fetchImpl, getCapturedDpopJkt: () => capturedDpopJkt };
 }
 
-async function setup(overrides: Partial<OAuthHandlersConfig["oauth"]> = {}) {
+async function setup(
+  overrides: Partial<OAuthHandlersConfig["oauth"]> = {},
+  mockAsOptions: { userinfoRequiresNonce?: boolean } = {},
+) {
   const { privateKey } = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
-  const { discovery, fetchImpl, getCapturedDpopJkt } = await setupMockAs();
+  const { discovery, fetchImpl, getCapturedDpopJkt } = await setupMockAs(mockAsOptions);
 
   const config: OAuthHandlersConfig = {
     oauth: {
@@ -463,5 +486,69 @@ describe("getAuthorizationHeader", () => {
   it("returns null with no session", async () => {
     const { config } = await setup();
     expect(await getAuthorizationHeader(new Request("https://app.example/api/whatever"), config)).toBeNull();
+  });
+});
+
+describe("getUserInfo", () => {
+  it("returns the AS's userinfo claims for the current session, unmapped", async () => {
+    const { config } = await setup();
+    const { callbackResponse } = await loginAndCallback(config);
+    const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
+
+    const result = await getUserInfo(requestWithCookies("https://app.example/api/me", sessionCookie), config);
+
+    expect(result?.claims).toMatchObject({
+      sub: "user-1",
+      name: "Ada Lovelace",
+      given_name: "Ada",
+      family_name: "Lovelace",
+      email: "ada@example.com",
+    });
+    expect(result?.setCookie).toBeUndefined();
+  });
+
+  it("retries once against a DPoP-Nonce challenge from the userinfo_endpoint", async () => {
+    const { config } = await setup({}, { userinfoRequiresNonce: true });
+    const { callbackResponse } = await loginAndCallback(config);
+    const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
+
+    const result = await getUserInfo(requestWithCookies("https://app.example/api/me", sessionCookie), config);
+
+    expect(result?.claims.sub).toBe("user-1");
+    expect(result?.claims._dpopNonceUsed).toBe("userinfo-nonce-1");
+  });
+
+  it("forwards the refreshed Set-Cookie when the access token was expiring", async () => {
+    const { config } = await setup();
+    const { writeSessionHeader } = await import("../src/session");
+    const setCookie = await writeSessionHeader(
+      { tokens: { accessToken: "at-old", tokenType: "DPoP", expiresAt: Date.now() - 1000, refreshToken: "rt-1" }, user: { sub: "u1" } },
+      config.session,
+    );
+
+    const result = await getUserInfo(
+      requestWithCookies("https://app.example/api/me", setCookie),
+      { ...config, refreshThresholdSeconds: 999_999 },
+    );
+    expect(result?.claims.sub).toBe("user-1");
+    expect(result?.setCookie).toBeTruthy();
+  });
+
+  it("throws when the userinfo_endpoint rejects the token", async () => {
+    const { config, fetchImpl } = await setup();
+    const { callbackResponse } = await loginAndCallback(config);
+    const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
+    fetchImpl.mockImplementationOnce(async () => new Response(null, { status: 401 }));
+    // The above only intercepts the *next* call; userinfo is the only call getUserInfo makes
+    // here since the token isn't expiring, so this is the userinfo request itself.
+
+    await expect(
+      getUserInfo(requestWithCookies("https://app.example/api/me", sessionCookie), config),
+    ).rejects.toThrow(/userinfo_endpoint returned 401/);
+  });
+
+  it("returns null with no session", async () => {
+    const { config } = await setup();
+    expect(await getUserInfo(new Request("https://app.example/api/me"), config)).toBeNull();
   });
 });

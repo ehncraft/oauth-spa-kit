@@ -77,8 +77,8 @@ packages/
             browser AND inside the server package below.
   server/   BFF: sealed-cookie session + createLoginHandler /
             createCallbackHandler / createSessionHandler /
-            createLogoutHandler / getAuthorizationHeader. Handlers are
-            plain `(Request) => Promise<Response>` -- deploy on Nitro,
+            createLogoutHandler / getAuthorizationHeader / getUserInfo.
+            Handlers are plain `(Request) => Promise<Response>` -- deploy on Nitro,
             Next.js route handlers, Cloudflare Workers, or Node via a small
             adapter. Also exposes an OpenID AuthZEN Authorization API
             client (evaluateAccess / evaluateAccessBatch / searchResources /
@@ -132,6 +132,11 @@ you're not inside Nitro.
 5. App API routes that need to call an upstream resource server call
    `getAuthorizationHeader(request, config)` to get a guaranteed-fresh
    `Authorization` header, refreshing under the hood exactly like step 3.
+   For the AS's own `userinfo_endpoint` specifically, `getUserInfo(request,
+   config)` wraps that same call plus the DPoP proof and nonce-retry it
+   needs, returning the raw claims -- the current profile can change
+   between login and any later request, so this hits `userinfo_endpoint`
+   rather than trusting the `id_token`'s point-in-time snapshot.
 
 No hidden iframe / `prompt=none` silent-renew path exists here, unlike
 `oidc-client-ts`'s iframe fallback -- third-party cookie restrictions

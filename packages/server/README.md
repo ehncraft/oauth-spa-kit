@@ -26,6 +26,7 @@ import {
   createSessionHandler,
   createLogoutHandler,
   getAuthorizationHeader,
+  getUserInfo,
   type OAuthHandlersConfig,
 } from "@oauth-spa-kit/server";
 
@@ -55,6 +56,11 @@ export const logout = createLogoutHandler(config);
 
 // From any other API route that needs to call an upstream resource server:
 const authHeader = await getAuthorizationHeader(request, config);
+
+// Or, for the AS's own userinfo_endpoint specifically (DPoP proof, nonce
+// retry, and token refresh all handled for you):
+const info = await getUserInfo(request, config);
+if (info) console.log(info.claims); // raw claims, shape depends on your granted scopes
 ```
 
 The SPA never sees an access or refresh token -- only `GET /auth/session`'s
