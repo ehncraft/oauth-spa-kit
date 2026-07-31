@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.2.1...v2.3.0) (2026-07-31)
+
+
+### Features
+
+* idle-timeout logout, on by default at 15 minutes ([766dcc7](https://github.com/ehncraft/oauth-spa-kit/commit/766dcc737c2fd1b0b0dffb2898a0887cb0da8fc5))
+
 ## [2.2.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.2.0...v2.2.1) (2026-07-30)
 
 
