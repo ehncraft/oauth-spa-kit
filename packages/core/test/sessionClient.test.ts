@@ -72,14 +72,15 @@ describe("createSessionClient", () => {
   });
 });
 
-// Liveness polling only starts when `window` exists (it's a browser-only feature -- these tests
-// run under vitest's default Node environment, which has no window global by default, so a
-// minimal stub is enough to opt the client under test into the polling branch without pulling
-// in a full DOM environment).
+// Liveness polling and idle tracking only start when `window` exists (both are browser-only
+// features -- these tests run under vitest's default Node environment, which has no window
+// global by default, so a minimal stub (with a mocked addEventListener, since idle tracking
+// registers activity listeners) is enough to opt the client under test into both branches
+// without pulling in a full DOM environment).
 describe("createSessionClient liveness polling", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.stubGlobal("window", {});
+    vi.stubGlobal("window", { addEventListener: vi.fn() });
   });
 
   afterEach(() => {
@@ -148,5 +149,67 @@ describe("createSessionClient liveness polling", () => {
 
     await vi.advanceTimersByTimeAsync(1000);
     expect(fetchImpl.mock.calls[1][0]).toBe("/custom/liveness");
+  });
+});
+
+describe("createSessionClient idle timeout", () => {
+  let assign: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    assign = vi.fn();
+    vi.stubGlobal("window", { addEventListener: vi.fn(), location: { origin: "http://localhost", assign } });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not start a timer while logged out", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ user: null }, 401));
+    const client = createSessionClient({ fetchImpl, idleTimeoutMs: 1000 });
+    await client.refresh();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("logs out after idleTimeoutMs of inactivity", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ user: { sub: "u1" } }));
+    const onIdleTimeout = vi.fn();
+    const client = createSessionClient({ fetchImpl, idleTimeoutMs: 1000, onIdleTimeout });
+    await client.refresh();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onIdleTimeout).toHaveBeenCalledOnce();
+    expect(assign).toHaveBeenCalledOnce();
+    expect(assign.mock.calls[0][0]).toContain("/auth/logout");
+  });
+
+  it("activity resets the timer instead of letting it lapse", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ user: { sub: "u1" } }));
+    const client = createSessionClient({ fetchImpl, idleTimeoutMs: 1000 });
+    await client.refresh();
+    const windowStub = window as unknown as { addEventListener: ReturnType<typeof vi.fn> };
+    const [, onActivity] = windowStub.addEventListener.mock.calls[0] as [string, () => void];
+
+    await vi.advanceTimersByTimeAsync(700);
+    onActivity(); // resets the 1000ms window with 700ms already elapsed
+    await vi.advanceTimersByTimeAsync(700);
+    expect(assign).not.toHaveBeenCalled(); // would have fired at 1000ms without the reset
+
+    await vi.advanceTimersByTimeAsync(300);
+    expect(assign).toHaveBeenCalledOnce();
+  });
+
+  it("idleTimeoutMs: 0 disables idle tracking entirely", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ user: { sub: "u1" } }));
+    const client = createSessionClient({ fetchImpl, idleTimeoutMs: 0 });
+    await client.refresh();
+
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(assign).not.toHaveBeenCalled();
+    expect((window as unknown as { addEventListener: ReturnType<typeof vi.fn> }).addEventListener).not.toHaveBeenCalled();
   });
 });

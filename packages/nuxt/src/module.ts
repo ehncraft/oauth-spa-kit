@@ -50,6 +50,13 @@ export interface ModuleOptions {
      * a real round trip to the AS rather than just checking local token expiry.
      */
     livenessCheckIntervalMs?: number;
+    /**
+     * Inactivity window (ms) before an authenticated session is force-logged-out client-side,
+     * regardless of whether the server-side session/token is still valid -- see
+     * `createSessionClient`'s `idleTimeoutMs` in `@oauth-spa-kit/core`. Defaults to 15 minutes;
+     * set to `0` to disable.
+     */
+    idleTimeoutMs?: number;
   };
 }
 
@@ -62,7 +69,7 @@ declare module "@nuxt/schema" {
     oauthSpaKit: ModuleOptions;
   }
   interface PublicRuntimeConfig {
-    oauthSpaKit: { livenessCheckIntervalMs?: number };
+    oauthSpaKit: { livenessCheckIntervalMs?: number; idleTimeoutMs?: number };
   }
 }
 
@@ -84,8 +91,11 @@ export default defineNuxtModule<ModuleOptions>({
     );
     nuxt.options.runtimeConfig.public.oauthSpaKit = defu(
       nuxt.options.runtimeConfig.public.oauthSpaKit,
-      { livenessCheckIntervalMs: options.client?.livenessCheckIntervalMs },
-    ) as { livenessCheckIntervalMs?: number };
+      {
+        livenessCheckIntervalMs: options.client?.livenessCheckIntervalMs,
+        idleTimeoutMs: options.client?.idleTimeoutMs,
+      },
+    ) as { livenessCheckIntervalMs?: number; idleTimeoutMs?: number };
 
     addServerHandler({ route: "/auth/login", handler: resolver.resolve("./runtime/server/routes/auth/login.get") });
     addServerHandler({ route: "/auth/callback", handler: resolver.resolve("./runtime/server/routes/auth/callback.get") });

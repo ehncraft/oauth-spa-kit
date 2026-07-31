@@ -10,9 +10,10 @@ import { useNuxtApp, useRuntimeConfig } from "#imports";
 function getClient(): SessionClient {
   const nuxtApp = useNuxtApp() as { _oauthSpaKitClient?: SessionClient };
   if (!nuxtApp._oauthSpaKitClient) {
-    const livenessCheckIntervalMs = useRuntimeConfig().public.oauthSpaKit?.livenessCheckIntervalMs;
+    const { livenessCheckIntervalMs, idleTimeoutMs } = useRuntimeConfig().public.oauthSpaKit ?? {};
     nuxtApp._oauthSpaKitClient = createSessionClient({
       livenessCheckIntervalMs,
+      idleTimeoutMs,
       // A confirmed-dead session (revoked, deactivated, expired past refresh) gets an
       // immediate re-auth prompt rather than leaving the user sitting on stale state until
       // their next navigation happens to notice.

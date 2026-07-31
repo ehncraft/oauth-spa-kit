@@ -38,6 +38,17 @@ export interface SessionClientOptions {
    * for anything beyond reactive state, e.g. redirecting straight to `login()`.
    */
   onSessionExpired?: () => void;
+  /**
+   * Inactivity window (ms) before an authenticated session is force-logged-out client-side,
+   * regardless of whether the server-side session/token is still valid. Neither the liveness
+   * poller above nor the navigation-triggered refresh() ever notice a merely idle tab -- both
+   * only catch a session the server already killed -- so without this, a tab left open and
+   * untouched with an otherwise-valid session stays logged in forever. Reset on `mousemove`,
+   * `keydown`, `click`, `scroll`, and `touchstart`. Defaults to 15 minutes; pass `0` to disable.
+   */
+  idleTimeoutMs?: number;
+  /** Called immediately before the idle-triggered logout redirect fires. */
+  onIdleTimeout?: () => void;
 }
 
 export interface SessionClient {
@@ -68,6 +79,9 @@ const initialState: SessionState = { ready: false, loggedIn: false, user: null }
 /** Consecutive liveness-check failures required before treating a session as actually dead. */
 const LIVENESS_FAILURE_THRESHOLD = 2;
 
+const DEFAULT_IDLE_TIMEOUT_MS = 15 * 60_000;
+const IDLE_ACTIVITY_EVENTS = ["mousemove", "keydown", "click", "scroll", "touchstart"] as const;
+
 export function createSessionClient(options: SessionClientOptions = {}): SessionClient {
   const baseUrl = options.baseUrl ?? "";
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -79,8 +93,26 @@ export function createSessionClient(options: SessionClientOptions = {}): Session
   let state: SessionState = initialState;
   const listeners = new Set<(state: SessionState) => void>();
 
+  const idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+  const idleTrackingEnabled = typeof window !== "undefined" && idleTimeoutMs > 0;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Restarted on every activity event and on every state change (so a fresh login starts the
+  // window immediately rather than waiting for the first mouse move) -- see `idleTimeoutMs` above.
+  function resetIdleTimer() {
+    if (!idleTrackingEnabled) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = state.loggedIn
+      ? setTimeout(() => {
+          options.onIdleTimeout?.();
+          void logout();
+        }, idleTimeoutMs)
+      : undefined;
+  }
+
   function setState(next: SessionState) {
     state = next;
+    resetIdleTimer();
     for (const listener of listeners) listener(state);
   }
 
@@ -141,6 +173,23 @@ export function createSessionClient(options: SessionClientOptions = {}): Session
     }, options.livenessCheckIntervalMs);
   }
 
+  function login(returnTo?: string): void {
+    const url = new URL(`${baseUrl}/auth/login`, window.location.origin);
+    if (returnTo) url.searchParams.set("returnTo", returnTo);
+    window.location.assign(url.toString());
+  }
+
+  async function logout(): Promise<void> {
+    const url = new URL(`${baseUrl}/auth/logout`, window.location.origin);
+    window.location.assign(url.toString());
+  }
+
+  if (idleTrackingEnabled) {
+    for (const event of IDLE_ACTIVITY_EVENTS) {
+      window.addEventListener(event, resetIdleTimer, { passive: true });
+    }
+  }
+
   return {
     getState: () => state,
     subscribe(callback) {
@@ -148,14 +197,7 @@ export function createSessionClient(options: SessionClientOptions = {}): Session
       return () => listeners.delete(callback);
     },
     refresh,
-    login(returnTo) {
-      const url = new URL(`${baseUrl}/auth/login`, window.location.origin);
-      if (returnTo) url.searchParams.set("returnTo", returnTo);
-      window.location.assign(url.toString());
-    },
-    async logout() {
-      const url = new URL(`${baseUrl}/auth/logout`, window.location.origin);
-      window.location.assign(url.toString());
-    },
+    login,
+    logout,
   };
 }
