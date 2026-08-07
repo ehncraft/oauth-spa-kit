@@ -119,6 +119,7 @@ export async function exchangeAuthorizationCode(args: ExchangeAuthorizationCodeA
       code: args.code,
       redirect_uri: args.config.redirectUri,
       code_verifier: args.codeVerifier,
+      ...(args.config.resource ? { resource: args.config.resource } : {}),
       ...assertionParams,
     });
   };
@@ -167,6 +168,7 @@ export async function exchangeRefreshToken(args: ExchangeRefreshTokenArgs): Prom
       grant_type: "refresh_token",
       client_id: args.config.clientId,
       refresh_token: args.refreshToken,
+      ...(args.config.resource ? { resource: args.config.resource } : {}),
       ...assertionParams,
     });
   };

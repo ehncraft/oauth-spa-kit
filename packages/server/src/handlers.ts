@@ -95,6 +95,11 @@ export function createLoginHandler(config: OAuthHandlersConfig) {
       nonce: pkce.nonce,
       code_challenge: pkce.codeChallenge,
       code_challenge_method: pkce.codeChallengeMethod,
+      // config.oauth.resource, not just extraAuthorizationParams -- see OAuthClientConfig's own
+      // doc comment: this is the one config knob that has to reach the authorize/PAR request
+      // AND every later token-endpoint call, so it gets its own field instead of asking every
+      // consumer to duplicate the same value into extraAuthorizationParams themselves.
+      ...(config.oauth.resource ? { resource: config.oauth.resource } : {}),
       ...(config.oauth.extraAuthorizationParams ?? {}),
     };
     if (dpopKeyPair) {

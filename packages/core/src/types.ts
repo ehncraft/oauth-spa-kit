@@ -60,6 +60,23 @@ export interface OAuthClientConfig {
    */
   par?: boolean;
   extraAuthorizationParams?: Record<string, string>;
+  /**
+   * RFC 8707 resource indicator -- which protected-resource audience this client wants on its
+   * access token. Automatically included on every leg that mints or renews a token: the
+   * authorize/PAR request (`createLoginHandler`) *and* every token-endpoint call
+   * (`exchangeAuthorizationCode`, `exchangeRefreshToken`) -- set this once here rather than
+   * duplicating it into `extraAuthorizationParams` yourself. Some authorization servers scope a
+   * resource's inclusion in `aud` to an explicit indicator on the *current* token request (RFC
+   * 8707 section 2 permits this; IdentityServer's own `RequireResourceIndicator` is one
+   * well-known example of an AS that does) and silently drop that resource from the minted
+   * token otherwise, even though it was already validated at authorize time -- the
+   * authorization code/refresh token only carries forward what was *granted*, not what gets
+   * *reissued* on every subsequent token call. Confirmed against a real independently-built AS
+   * with this exact behavior. Single-valued:
+   * a consumer needing more than one simultaneous audience should request them as separate
+   * tokens.
+   */
+  resource?: string;
 }
 
 /** Raw token endpoint response (RFC 6749 section 5.1). */
