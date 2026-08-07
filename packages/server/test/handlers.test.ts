@@ -227,6 +227,24 @@ describe("createLoginHandler", () => {
     expect(response.headers.get("Set-Cookie")).toMatch(/^__oauth_pkce=/);
   });
 
+  it("includes oauth.resource in the pushed authorization request", async () => {
+    const { config } = await setup({ resource: "urn:example:self" });
+    const login = createLoginHandler(config);
+    await login(new Request("https://app.example/auth/login"));
+
+    const pushedParams = new URLSearchParams(await extractPushedParams(config));
+    expect(pushedParams.get("resource")).toBe("urn:example:self");
+  });
+
+  it("does not include a resource param in the pushed authorization request when unset", async () => {
+    const { config } = await setup();
+    const login = createLoginHandler(config);
+    await login(new Request("https://app.example/auth/login"));
+
+    const pushedParams = new URLSearchParams(await extractPushedParams(config));
+    expect(pushedParams.has("resource")).toBe(false);
+  });
+
   it("binds the authorization request to the DPoP key via dpop_jkt", async () => {
     const { config, getCapturedDpopJkt } = await setup();
     const login = createLoginHandler(config);
@@ -280,6 +298,18 @@ describe("createCallbackHandler", () => {
     const setCookies = callbackResponse.headers.getSetCookie();
     expect(setCookies.some((c) => c.startsWith("__session="))).toBe(true);
     expect(setCookies.some((c) => c.startsWith("__oauth_pkce=") && c.includes("Max-Age=0"))).toBe(true);
+  });
+
+  it("resends oauth.resource on the code-exchange token request, not just the PAR request", async () => {
+    // The bug this guards against: an AS that only stamps a resource's audience onto the
+    // access token when the *token* request repeats the indicator (RFC 8707 section 2; e.g.
+    // Duende IdentityServer's own RequireResourceIndicator) would otherwise mint a token with
+    // no audience for that resource at all, even though PAR/authorize already validated it.
+    const { config } = await setup({ resource: "urn:example:self" });
+    await loginAndCallback(config);
+
+    const body = new URLSearchParams(extractLastTokenParams(config));
+    expect(body.get("resource")).toBe("urn:example:self");
   });
 
   it("authenticates the code exchange with a client assertion audienced to the issuer, not the token endpoint (rfc7523bis)", async () => {

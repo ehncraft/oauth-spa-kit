@@ -71,6 +71,36 @@ describe("exchangeAuthorizationCode", () => {
     expect(payload.aud).toBe("https://as.example");
   });
 
+  it("includes config.resource in the token request when set", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: "at", token_type: "DPoP", expires_in: 3600 }));
+    await exchangeAuthorizationCode({
+      config: await baseConfig({ resource: "urn:example:self" }),
+      tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
+      code: "code-1",
+      codeVerifier: "verifier-1",
+      fetchImpl,
+    });
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = new URLSearchParams(init.body as URLSearchParams);
+    expect(body.get("resource")).toBe("urn:example:self");
+  });
+
+  it("omits resource from the token request when config.resource is unset", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: "at", token_type: "DPoP", expires_in: 3600 }));
+    await exchangeAuthorizationCode({
+      config: await baseConfig(),
+      tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
+      code: "code-1",
+      codeVerifier: "verifier-1",
+      fetchImpl,
+    });
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = new URLSearchParams(init.body as URLSearchParams);
+    expect(body.has("resource")).toBe(false);
+  });
+
   it("omits the DPoP header when config.dpop === false", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       jsonResponse({ access_token: "at", token_type: "Bearer", expires_in: 3600 }),
@@ -209,6 +239,34 @@ describe("exchangeRefreshToken", () => {
       fetchImpl,
     });
     expect(tokens.refreshToken).toBe("rt-rotated");
+  });
+
+  it("includes config.resource in the token request when set", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: "at2", token_type: "DPoP", expires_in: 3600 }));
+    await exchangeRefreshToken({
+      config: await baseConfig({ resource: "urn:example:self" }),
+      tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
+      refreshToken: "rt-original",
+      fetchImpl,
+    });
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = new URLSearchParams(init.body as URLSearchParams);
+    expect(body.get("resource")).toBe("urn:example:self");
+  });
+
+  it("omits resource from the token request when config.resource is unset", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: "at2", token_type: "DPoP", expires_in: 3600 }));
+    await exchangeRefreshToken({
+      config: await baseConfig(),
+      tokenEndpoint: "https://as.example/token",
+      assertionAudience: "https://as.example",
+      refreshToken: "rt-original",
+      fetchImpl,
+    });
+    const [, init] = fetchImpl.mock.calls[0];
+    const body = new URLSearchParams(init.body as URLSearchParams);
+    expect(body.has("resource")).toBe(false);
   });
 
   it("audiences the client assertion to assertionAudience, not the token endpoint (rfc7523bis)", async () => {
