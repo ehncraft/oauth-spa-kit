@@ -42,3 +42,47 @@ jobs:
       - run: pnpm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # master's ruleset rejects any direct push (see release.config.js's own comment on why
+      # @semantic-release/git was dropped) -- the version-bump/changelog files the "release"
+      # step above already wrote to disk (but never committed) get their own PR here instead,
+      # merged immediately via the API rather than a raw push, satisfying both the
+      # "must go through a pull request" and "must merge via API or UI" rules.
+      - name: Open and merge a PR for the release commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Nothing to commit -- no release ran (no releasable commits since the last tag)."
+            exit 0
+          fi
+
+          version="$(node -p "require('./packages/core/package.json').version")"
+          branch="chore/release-${version}"
+          message="chore(release): ${version} [skip ci]"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add CHANGELOG.md packages/*/package.json
+          git commit -m "$message"
+          git push origin "$branch"
+
+          gh pr create --base master --head "$branch" --title "$message" \
+            --body "Automated version bump + changelog for \`${version}\` -- see \`CHANGELOG.md\` for what's included. This repo's own tag/npm publish/GitHub Release already happened in the previous step; this PR only syncs the version-bump commit back into \`master\`, since a direct push is rejected."
+
+          # The PR's own required checks (this exact commit, on its own branch) have to report
+          # before the merge attempt below is even allowed -- poll rather than assume they're
+          # already done by the time this step reaches here.
+          for _ in $(seq 1 30); do
+            check_state="$(gh pr checks "$branch" --json state --jq '[.[].state] | unique | join(",")' 2>/dev/null || echo PENDING)"
+            case "$check_state" in
+              SUCCESS) break ;;
+              *FAILURE*|*ERROR*|*CANCELLED*) echo "Release PR checks failed: $check_state"; exit 1 ;;
+              *) sleep 10 ;;
+            esac
+          done
+
+          gh pr merge "$branch" --squash --subject "$message" --delete-branch
