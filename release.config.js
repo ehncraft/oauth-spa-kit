@@ -8,6 +8,16 @@
 // stamp every package.json with the new version, then `pnpm run
 // publish:packages`, which uses `pnpm publish` and resolves `workspace:*`
 // correctly.
+// No @semantic-release/git: master's ruleset rejects any direct push, with no bypass available
+// to a personal-account repo's default GITHUB_TOKEN (confirmed: neither an Integration bypass
+// actor -- "github-actions" is owned by GitHub's own org, not this account, so personal repos
+// can't add it -- nor a RepositoryRole bypass, which only covers human-authenticated pushes,
+// not the bot token GitHub Actions runs as). The version-bump/changelog commit this plugin used
+// to push straight to master is instead opened and merged as its own PR by
+// .github/workflows/release.yml's own step, right after this config's "prepare" plugins
+// (changelog, exec's set-versions.mjs) have already written the files to disk -- git tagging
+// and the GitHub Release itself (below, @semantic-release/github) are semantic-release core's
+// own responsibility, not this plugin's, so removing it doesn't affect those.
 export default {
   branches: ["master"],
   plugins: [
@@ -19,13 +29,6 @@ export default {
       {
         prepareCmd: "node scripts/set-versions.mjs ${nextRelease.version}",
         publishCmd: "pnpm run publish:packages",
-      },
-    ],
-    [
-      "@semantic-release/git",
-      {
-        assets: ["CHANGELOG.md", "packages/*/package.json"],
-        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
       },
     ],
     "@semantic-release/github",
