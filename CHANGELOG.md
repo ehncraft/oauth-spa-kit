@@ -1,3 +1,10 @@
+## [2.3.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.3.0...v2.3.1) (2026-08-07)
+
+
+### Bug Fixes
+
+* forward resource indicator to the token endpoint, not just PAR ([#19](https://github.com/ehncraft/oauth-spa-kit/issues/19)) ([a75e583](https://github.com/ehncraft/oauth-spa-kit/commit/a75e58359833efab5532910e3fbe178be5082409))
+
 # [2.3.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.2.1...v2.3.0) (2026-07-31)
 
 
