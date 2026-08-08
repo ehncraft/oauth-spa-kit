@@ -83,6 +83,56 @@ for the lower-level protocol primitives these handlers are built from, and
 [`@oauth-spa-kit/react`](https://www.npmjs.com/package/@oauth-spa-kit/react)
 for a client-side `useAuth()` hook that talks to these routes.
 
+## Server-side session store (optional)
+
+By default the session cookie is fully self-contained -- access/id/refresh tokens, the DPoP key
+pair, and user claims are all sealed (AES-256-GCM) directly into the cookie value. That's zero
+infrastructure to run, but it does mean the cookie grows with however much token/claims data
+accumulates, and browsers/proxies cap cookie size (commonly ~4KB).
+
+Pass a `store` to keep the cookie small regardless: the cookie then carries only a random opaque
+id, and the actual session data lives wherever you point `store` -- Redis, Cloudflare KV,
+[unstorage](https://unstorage.unjs.io/), anything. The interface is deliberately three methods,
+no framework assumptions:
+
+```ts
+import type { SessionStore } from "@oauth-spa-kit/server";
+
+const store: SessionStore = {
+  async get(sessionId) {
+    return redis.get(`session:${sessionId}`);
+  },
+  async set(sessionId, sealedPayload, maxAgeSeconds) {
+    await redis.set(`session:${sessionId}`, sealedPayload, "EX", maxAgeSeconds);
+  },
+  async delete(sessionId) {
+    await redis.del(`session:${sessionId}`);
+  },
+};
+
+const config: OAuthHandlersConfig = {
+  oauth: { /* ... */ },
+  session: {
+    password: process.env.OAUTH_SESSION_PASSWORD!,
+    store, // omit entirely to keep the default fully-in-cookie behavior
+  },
+};
+```
+
+The value handed to `store.set` is still sealed the same way the cookie itself would be -- your
+store never sees plaintext tokens even if it's logged or inspected. `createLogoutHandler` and
+`createLivenessHandler`'s rejected-session path both call the new `deleteStoredSession` for you,
+so a logout (or a session AuthZEN/the AS itself has revoked) invalidates the store entry
+immediately rather than only once your store's own TTL catches up. If you're writing a custom
+handler instead of using the provided ones, call it yourself alongside `clearSessionHeader`:
+
+```ts
+import { clearSessionHeader, deleteStoredSession } from "@oauth-spa-kit/server";
+
+await deleteStoredSession(request, config.session); // no-op if no store is configured
+headers.append("Set-Cookie", clearSessionHeader(config.session));
+```
+
 ## AuthZEN (externalized authorization)
 
 Once a request is authenticated, [`evaluateAccess`](https://openid.net/specs/authorization-api-1_0-01.html)

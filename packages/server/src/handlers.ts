@@ -19,7 +19,7 @@ import {
   type OidcDiscoveryDocument,
 } from "@oauth-spa-kit/core";
 import { clearPkceStateHeader, readPkceState, writePkceStateHeader } from "./pkceState.js";
-import { clearSessionHeader, readSession, writeSessionHeader, type SessionConfig } from "./session.js";
+import { clearSessionHeader, deleteStoredSession, readSession, writeSessionHeader, type SessionConfig } from "./session.js";
 
 export interface OAuthHandlersConfig {
   oauth: OAuthClientConfig;
@@ -246,6 +246,7 @@ export function createSessionHandler(config: OAuthHandlersConfig) {
     }
 
     if (!session.tokens.refreshToken) {
+      await deleteStoredSession(request, config.session);
       return new Response(JSON.stringify({ user: null }), {
         status: 401,
         headers: { "content-type": "application/json", "Set-Cookie": clearSessionHeader(config.session) },
@@ -263,7 +264,7 @@ export function createSessionHandler(config: OAuthHandlersConfig) {
         dpopKeyPair,
         fetchImpl: config.fetchImpl,
       });
-      const setCookie = await writeSessionHeader(session, config.session);
+      const setCookie = await writeSessionHeader(session, config.session, request);
       return new Response(JSON.stringify({ user: session.user, device: session.device }), {
         status: 200,
         headers: { "content-type": "application/json", "Set-Cookie": setCookie },
@@ -271,6 +272,7 @@ export function createSessionHandler(config: OAuthHandlersConfig) {
     } catch {
       // Refresh token invalid, rotated-and-reused, or revoked -- force a
       // real re-login rather than silently keep serving a stale session.
+      await deleteStoredSession(request, config.session);
       return new Response(JSON.stringify({ user: null }), {
         status: 401,
         headers: { "content-type": "application/json", "Set-Cookie": clearSessionHeader(config.session) },
@@ -289,6 +291,7 @@ export function createLogoutHandler(config: OAuthHandlersConfig) {
     // it, expect the AS to fall back to an interactive "are you sure?" prompt and/or drop
     // post_logout_redirect_uri entirely instead of honoring it.
     const session = await readSession(request, config.session);
+    await deleteStoredSession(request, config.session);
 
     const headers = new Headers({ "content-type": "application/json" });
     headers.append("Set-Cookie", clearSessionHeader(config.session));
@@ -343,7 +346,7 @@ export async function getAuthorizationHeader(
       dpopKeyPair,
       fetchImpl: config.fetchImpl,
     });
-    const setCookie = await writeSessionHeader(session, config.session);
+    const setCookie = await writeSessionHeader(session, config.session, request);
     return { header: `${session.tokens.tokenType} ${session.tokens.accessToken}`, setCookie };
   }
 
@@ -431,6 +434,7 @@ export function createLivenessHandler(config: OAuthHandlersConfig) {
       // immediately redirects to a fresh login on `onSessionExpired`: a consumer that
       // instead just shows a "session expired" message would otherwise keep sending a
       // cookie doomed to fail every subsequent request.
+      await deleteStoredSession(request, config.session);
       const headers = new Headers({ "content-type": "application/json" });
       headers.append("Set-Cookie", clearSessionHeader(config.session));
       return new Response(JSON.stringify({ alive: false }), { status: 401, headers });

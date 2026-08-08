@@ -17,7 +17,25 @@ import {
   type OAuthHandlersConfig,
 } from "../src/handlers";
 import { readPkceState } from "../src/pkceState";
+import type { SessionStore } from "../src/session";
 import { requestWithCookies, toCookieHeader } from "./testUtils";
+
+/** Minimal in-memory `SessionStore` for tests -- a real consumer would back this with Redis/KV/etc. */
+function createMemoryStore(): SessionStore & { size: () => number } {
+  const entries = new Map<string, string>();
+  return {
+    async get(sessionId) {
+      return entries.get(sessionId) ?? null;
+    },
+    async set(sessionId, sealedPayload) {
+      entries.set(sessionId, sealedPayload);
+    },
+    async delete(sessionId) {
+      entries.delete(sessionId);
+    },
+    size: () => entries.size,
+  };
+}
 
 /** Real shape of every `fetchImpl` call in this file's mocks -- avoids re-annotating a mismatched tuple at every call site. */
 type FetchCall = [string, { headers: Record<string, string>; body?: string }];
@@ -496,6 +514,20 @@ describe("createLogoutHandler", () => {
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get("Location")!);
     expect(location.searchParams.get("id_token_hint")).toBeTruthy();
+  });
+
+  it("removes the store entry immediately, not just the cookie, when a session store is configured", async () => {
+    const store = createMemoryStore();
+    const { config } = await setup();
+    const storeConfig = { ...config, session: { ...config.session, store } };
+    const { callbackResponse } = await loginAndCallback(storeConfig);
+    const sessionCookie = callbackResponse.headers.getSetCookie().find((c) => c.startsWith("__session="))!;
+    expect(store.size()).toBe(1);
+
+    const logout = createLogoutHandler(storeConfig);
+    await logout(requestWithCookies("https://app.example/auth/logout", sessionCookie));
+
+    expect(store.size()).toBe(0);
   });
 });
 
