@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.3.1...v2.4.0) (2026-08-08)
+
+
+### Features
+
+* **server:** add pluggable server-side session store ([#23](https://github.com/ehncraft/oauth-spa-kit/issues/23)) ([969c25d](https://github.com/ehncraft/oauth-spa-kit/commit/969c25d96df6aec38a45ff48e75a8ec8bfe0baa3)), closes [#22](https://github.com/ehncraft/oauth-spa-kit/issues/22)
+
 ## [2.3.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.3.0...v2.3.1) (2026-08-07)
 
 
