@@ -31,7 +31,19 @@ export interface ModuleOptions {
      */
     redirectUri?: string;
   };
-  session: SessionConfig;
+  session: Omit<SessionConfig, "store"> & {
+    /**
+     * Mounts the session store on a named Nitro storage layer (`useStorage(storageMount)`)
+     * instead of `@oauth-spa-kit/server`'s raw `SessionConfig.store` object -- that field is a
+     * live object with `get`/`set`/`delete` *functions*, and Nuxt's `runtimeConfig` only
+     * round-trips JSON-serializable values through Nitro's build; a function silently doesn't
+     * survive that trip. A storage *mount name* is just a string, so it does. Configure the
+     * actual backing driver (Redis, Cloudflare KV, fs, ...) the normal Nitro way, via
+     * `nitro.storage[storageMount]` in `nuxt.config.ts` -- see the README. Omit to keep the
+     * default fully-self-contained cookie (no store at all).
+     */
+    storageMount?: string;
+  };
   refreshThresholdSeconds?: number;
   /**
    * Logs the callback handler's raw failure cause via `console.error` before
