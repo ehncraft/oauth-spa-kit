@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.4.0...v2.5.0) (2026-08-08)
+
+
+### Features
+
+* **nuxt:** support the new session store via a named Nitro storage mount ([#26](https://github.com/ehncraft/oauth-spa-kit/issues/26)) ([ed28155](https://github.com/ehncraft/oauth-spa-kit/commit/ed28155b9f04b744f995c2ca68e335cca8ea624e)), closes [22/#23](https://github.com/ehncraft/oauth-spa-kit/issues/23)
+
 # [2.4.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.3.1...v2.4.0) (2026-08-08)
 
 
