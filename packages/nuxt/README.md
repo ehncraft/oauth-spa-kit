@@ -111,6 +111,34 @@ is set, a confirmed-dead session (revoked, deactivated, expired past
 refresh) redirects straight to `login()` instead of leaving the user
 sitting on stale state until their next navigation.
 
+## Writing your own authenticated server routes
+
+The `/auth/*` routes above are only half the story -- a real app almost always needs its own
+server routes too (a userinfo proxy, a "call this upstream API on the signed-in user's behalf"
+helper, etc.), and those need the exact same resolved config (`redirectUri` derived from the
+request origin, `privateKeyJwk` imported into a real `CryptoKey`, `session.storageMount` adapted
+into a real `SessionStore`) that the built-in routes use internally.
+
+`resolveHandlersConfig` is auto-imported into every server route for exactly this -- no explicit
+import needed, same as `useAuth()` is auto-imported client-side:
+
+```ts
+// server/api/me.get.ts
+import { getUserInfo } from "@oauth-spa-kit/server";
+
+export default defineEventHandler(async (event) => {
+  const config = await resolveHandlersConfig(event); // auto-imported, no import statement needed
+  const request = toWebRequest(event);
+  const result = await getUserInfo(request, config);
+  if (!result) throw createError({ statusCode: 401 });
+  return result.claims;
+});
+```
+
+Don't hand-roll a duplicate of this resolver in your own app -- it drifts the moment this
+module's internals change (a real bug hit doing exactly that, see
+[#28](https://github.com/ehncraft/oauth-spa-kit/issues/28)).
+
 ## License
 
 MIT

@@ -1,4 +1,4 @@
-import { addImports, addServerHandler, addPlugin, createResolver, defineNuxtModule } from "@nuxt/kit";
+import { addImports, addServerHandler, addServerImports, addPlugin, createResolver, defineNuxtModule } from "@nuxt/kit";
 import { defu } from "defu";
 import type { OAuthClientConfig, JwtAlgorithm } from "@oauth-spa-kit/core";
 import type { SessionConfig } from "@oauth-spa-kit/server";
@@ -117,5 +117,16 @@ export default defineNuxtModule<ModuleOptions>({
 
     addImports({ name: "useAuth", from: resolver.resolve("./runtime/app/composables/useAuth") });
     addPlugin(resolver.resolve("./runtime/app/plugins/session.client"));
+
+    // resolveHandlersConfig is what every /auth/* route above actually uses to turn the raw
+    // runtimeConfig placeholder into a real OAuthHandlersConfig (redirectUri derived from the
+    // request origin, privateKeyJwk imported to a CryptoKey, session.storageMount adapted into
+    // a real SessionStore) -- auto-imported here (Nitro server-only, matching useAuth's
+    // client-only auto-import above) so a consumer's *own* custom authenticated server routes
+    // (a userinfo proxy, a resource-API call helper, etc.) can call the exact same resolver
+    // instead of maintaining a hand-rolled duplicate that WILL drift the next time this
+    // function's internals change -- confirmed the hard way, see
+    // https://github.com/ehncraft/oauth-spa-kit/issues/28.
+    addServerImports([{ name: "resolveHandlersConfig", from: resolver.resolve("./runtime/server/utils/config") }]);
   },
 });
