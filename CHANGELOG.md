@@ -1,3 +1,10 @@
+## [2.5.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.5.0...v2.5.1) (2026-08-08)
+
+
+### Bug Fixes
+
+* **nuxt:** auto-import resolveHandlersConfig for consumers' own server routes ([#29](https://github.com/ehncraft/oauth-spa-kit/issues/29)) ([6494c0c](https://github.com/ehncraft/oauth-spa-kit/commit/6494c0cceaaa05360064309b19396eba2997cb69)), closes [#28](https://github.com/ehncraft/oauth-spa-kit/issues/28)
+
 # [2.5.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.4.0...v2.5.0) (2026-08-08)
 
 
