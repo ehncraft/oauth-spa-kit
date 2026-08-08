@@ -52,6 +52,39 @@ The module registers `GET /auth/login`, `GET /auth/callback`,
 `GET /auth/session`, `POST /auth/logout`, and `GET /auth/liveness` as Nitro
 routes automatically.
 
+## Server-side session store (optional)
+
+By default the session cookie is fully self-contained (see `@oauth-spa-kit/server`'s own
+README). To keep it small regardless of token/claims size, set `session.storageMount` to a
+named [Nitro storage mount](https://nitro.build/guide/storage) instead of wiring
+`@oauth-spa-kit/server`'s raw `SessionConfig.store` directly -- that field is a live object with
+functions, and Nuxt's `runtimeConfig` only round-trips JSON-serializable values through the
+Nitro build, so a function silently wouldn't survive the trip. A mount *name* is just a string,
+so it does:
+
+```ts
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ["@oauth-spa-kit/nuxt"],
+  oauthSpaKit: {
+    session: {
+      password: process.env.OAUTH_SESSION_PASSWORD!,
+      storageMount: "oauthSessions",
+    },
+  },
+  nitro: {
+    storage: {
+      oauthSessions: {
+        driver: "redis",
+        /* host, port, etc. -- see unstorage's redis driver docs */
+      },
+    },
+  },
+});
+```
+
+Omit `storageMount` to keep the default fully-in-cookie behavior -- nothing else to configure.
+
 ## Usage
 
 ```vue
