@@ -1,6 +1,6 @@
-import { createError, defineEventHandler, readBody, sendWebResponse, toWebRequest } from "h3";
-import { evaluateAccess, resolveOwnSubject, type AuthzenAction, type AuthzenContext, type AuthzenEntity } from "@oauth-spa-kit/server";
-import { resolveAuthzenConfig, resolveHandlersConfig } from "../../../utils/config";
+import { createError, defineEventHandler, readBody, sendWebResponse } from "h3";
+import { evaluateAccess, type AuthzenAction, type AuthzenContext, type AuthzenEntity } from "@oauth-spa-kit/server";
+import { resolveCallerSubject } from "../../../utils/resolveCallerSubject";
 
 interface EvaluateBody {
   action: AuthzenAction;
@@ -18,15 +18,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "action.name is required" });
   }
 
-  const config = await resolveHandlersConfig(event);
-  const authzen = resolveAuthzenConfig(event);
-  const request = toWebRequest(event);
-
-  const subject = await resolveOwnSubject(request, config, {
-    endpoint: authzen.subjectEndpoint,
-    idField: authzen.subjectIdField,
-    subjectType: authzen.subjectType,
-  });
+  const { config, pdpUrl, request, subject } = await resolveCallerSubject(event);
 
   const headers = new Headers({ "content-type": "application/json" });
   if (!subject) {
@@ -34,7 +26,7 @@ export default defineEventHandler(async (event) => {
   }
   if (subject.setCookie) headers.set("Set-Cookie", subject.setCookie);
 
-  const evaluated = await evaluateAccess(request, config, { pdpUrl: authzen.pdpUrl }, {
+  const evaluated = await evaluateAccess(request, config, { pdpUrl }, {
     subject: subject.result,
     action: body.action,
     resource: body.resource,
