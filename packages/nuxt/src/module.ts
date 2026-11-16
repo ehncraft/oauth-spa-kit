@@ -121,6 +121,7 @@ export default defineNuxtModule<ModuleOptions>({
     addServerHandler({ route: "/auth/logout", handler: resolver.resolve("./runtime/server/routes/auth/logout.get") });
     addServerHandler({ route: "/auth/liveness", handler: resolver.resolve("./runtime/server/routes/auth/liveness.get") });
     addServerHandler({ route: "/auth/authz/evaluate", handler: resolver.resolve("./runtime/server/routes/auth/authz/evaluate.post") });
+    addServerHandler({ route: "/auth/authz/evaluate-batch", handler: resolver.resolve("./runtime/server/routes/auth/authz/evaluate-batch.post") });
 
     addImports({ name: "useAuth", from: resolver.resolve("./runtime/app/composables/useAuth") });
     addImports({ name: "useCan", from: resolver.resolve("./runtime/app/composables/useCan") });
