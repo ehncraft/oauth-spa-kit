@@ -1,3 +1,10 @@
+## [2.7.2](https://github.com/ehncraft/oauth-spa-kit/compare/v2.7.1...v2.7.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* **server:** attach a DPoP proof to every AuthZEN PDP/subject-resolver call ([#37](https://github.com/ehncraft/oauth-spa-kit/issues/37)) ([268cb41](https://github.com/ehncraft/oauth-spa-kit/commit/268cb416281179036cd07b90cb3ae2e1eb63bb1a))
+
 ## [2.7.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.7.0...v2.7.1) (2026-11-16)
 
 
