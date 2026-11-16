@@ -1,3 +1,10 @@
+# [2.6.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.5.1...v2.6.0) (2026-11-16)
+
+
+### Features
+
+* **nuxt:** add AuthZEN evaluate route and useCan() composable ([#31](https://github.com/ehncraft/oauth-spa-kit/issues/31)) ([de51275](https://github.com/ehncraft/oauth-spa-kit/commit/de51275b2e19597d79a44bb6bf9f9f68a8d9bd1a))
+
 ## [2.5.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.5.0...v2.5.1) (2026-08-08)
 
 
