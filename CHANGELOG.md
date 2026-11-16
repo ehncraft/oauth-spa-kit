@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.6.0...v2.7.0) (2026-11-16)
+
+
+### Features
+
+* **nuxt:** add batch AuthZEN evaluation for sync nav-style gating ([#33](https://github.com/ehncraft/oauth-spa-kit/issues/33)) ([2681b08](https://github.com/ehncraft/oauth-spa-kit/commit/2681b08c4f12595bcae429939119e0a55c538832))
+
 # [2.6.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.5.1...v2.6.0) (2026-11-16)
 
 
