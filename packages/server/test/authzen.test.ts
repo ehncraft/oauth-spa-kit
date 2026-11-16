@@ -3,6 +3,7 @@ import {
   AuthzenError,
   evaluateAccess,
   evaluateAccessBatch,
+  resolveOwnSubject,
   searchActions,
   searchResources,
   searchSubjects,
@@ -163,5 +164,71 @@ describe("search APIs", () => {
       { subject: { type: "user", id: "u1" }, resource: { type: "document", id: "doc-1" } },
     );
     expect(result?.result.results).toEqual([{ name: "can_read" }]);
+  });
+});
+
+describe("resolveOwnSubject", () => {
+  it("calls the resolver endpoint with the session's Authorization header and maps membershipId", async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toBe("https://pdp.example/v1/me/access");
+      expect((init!.headers as Record<string, string>).authorization).toBe("DPoP at-1");
+      return jsonResponse({ membershipId: "m-1", roles: [], permissions: [] });
+    });
+
+    const result = await resolveOwnSubject(
+      requestWithCookies("https://app.example/api/whatever", await sessionCookie()),
+      config,
+      { endpoint: "https://pdp.example/v1/me/access", fetchImpl },
+    );
+
+    expect(result?.result).toEqual({ type: "membership", id: "m-1" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null with no session, without calling the resolver endpoint", async () => {
+    const fetchImpl = vi.fn();
+    const result = await resolveOwnSubject(
+      new Request("https://app.example/api/whatever"),
+      config,
+      { endpoint: "https://pdp.example/v1/me/access", fetchImpl },
+    );
+    expect(result).toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("honors a custom idField and subjectType", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ sub: "u-42" }));
+
+    const result = await resolveOwnSubject(
+      requestWithCookies("https://app.example/api/whatever", await sessionCookie()),
+      config,
+      { endpoint: "https://pdp.example/v1/me/access", idField: "sub", subjectType: "user", fetchImpl },
+    );
+
+    expect(result?.result).toEqual({ type: "user", id: "u-42" });
+  });
+
+  it("throws AuthzenError when the response is missing the id field", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ roles: [] }));
+
+    await expect(
+      resolveOwnSubject(
+        requestWithCookies("https://app.example/api/whatever", await sessionCookie()),
+        config,
+        { endpoint: "https://pdp.example/v1/me/access", fetchImpl },
+      ),
+    ).rejects.toThrow(AuthzenError);
+  });
+
+  it("surfaces a non-2xx resolver response as an AuthzenError", async () => {
+    const fetchImpl = vi.fn(async () => new Response("unauthorized", { status: 401 }));
+
+    await expect(
+      resolveOwnSubject(
+        requestWithCookies("https://app.example/api/whatever", await sessionCookie()),
+        config,
+        { endpoint: "https://pdp.example/v1/me/access", fetchImpl },
+      ),
+    ).rejects.toThrow(AuthzenError);
   });
 });

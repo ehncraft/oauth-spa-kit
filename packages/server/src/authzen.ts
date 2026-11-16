@@ -224,3 +224,35 @@ export async function searchActions(
 ): Promise<AuthzenResult<AuthzenActionSearchResponse> | null> {
   return callPdp(request, config, authzen, "access/v1/search/action", search);
 }
+
+export interface SubjectResolverConfig {
+  endpoint: string;
+  idField?: string;
+  subjectType?: string;
+  fetchImpl?: typeof fetch;
+}
+
+export async function resolveOwnSubject(
+  request: Request,
+  config: OAuthHandlersConfig,
+  resolver: SubjectResolverConfig,
+): Promise<AuthzenResult<AuthzenEntity> | null> {
+  const auth = await getAuthorizationHeader(request, config);
+  if (!auth) return null;
+
+  const fetchImpl = resolver.fetchImpl ?? fetch;
+  const response = await fetchImpl(resolver.endpoint, { headers: { authorization: auth.header } });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new AuthzenError(`Subject resolver call to ${resolver.endpoint} failed with status ${response.status}`, response.status, body);
+  }
+
+  const claims = (await response.json()) as Record<string, unknown>;
+  const idField = resolver.idField ?? "membershipId";
+  const id = claims[idField];
+  if (typeof id !== "string") {
+    throw new AuthzenError(`Subject resolver response from ${resolver.endpoint} is missing a string "${idField}" field`);
+  }
+
+  return { result: { type: resolver.subjectType ?? "membership", id }, setCookie: auth.setCookie };
+}

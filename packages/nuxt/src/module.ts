@@ -52,6 +52,12 @@ export interface ModuleOptions {
    * signal, not just dev noise). Set to `false` to opt out.
    */
   logCallbackErrors?: boolean;
+  authzen?: {
+    pdpUrl?: string;
+    subjectEndpoint?: string;
+    subjectIdField?: string;
+    subjectType?: string;
+  };
   /** Browser-side session-client behavior. Unlike `oauth`/`session`, this reaches the client bundle -- keep it free of secrets. */
   client?: {
     /**
@@ -114,8 +120,10 @@ export default defineNuxtModule<ModuleOptions>({
     addServerHandler({ route: "/auth/session", handler: resolver.resolve("./runtime/server/routes/auth/session.get") });
     addServerHandler({ route: "/auth/logout", handler: resolver.resolve("./runtime/server/routes/auth/logout.get") });
     addServerHandler({ route: "/auth/liveness", handler: resolver.resolve("./runtime/server/routes/auth/liveness.get") });
+    addServerHandler({ route: "/auth/authz/evaluate", handler: resolver.resolve("./runtime/server/routes/auth/authz/evaluate.post") });
 
     addImports({ name: "useAuth", from: resolver.resolve("./runtime/app/composables/useAuth") });
+    addImports({ name: "useCan", from: resolver.resolve("./runtime/app/composables/useCan") });
     addPlugin(resolver.resolve("./runtime/app/plugins/session.client"));
 
     // resolveHandlersConfig is what every /auth/* route above actually uses to turn the raw
@@ -127,6 +135,9 @@ export default defineNuxtModule<ModuleOptions>({
     // instead of maintaining a hand-rolled duplicate that WILL drift the next time this
     // function's internals change -- confirmed the hard way, see
     // https://github.com/ehncraft/oauth-spa-kit/issues/28.
-    addServerImports([{ name: "resolveHandlersConfig", from: resolver.resolve("./runtime/server/utils/config") }]);
+    addServerImports([
+      { name: "resolveHandlersConfig", from: resolver.resolve("./runtime/server/utils/config") },
+      { name: "resolveAuthzenConfig", from: resolver.resolve("./runtime/server/utils/config") },
+    ]);
   },
 });

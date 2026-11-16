@@ -31,6 +31,24 @@ function storageBackedSessionStore(mountName: string): SessionStore {
 // JWK again would be wasteful.
 let cachedPrivateKey: Promise<CryptoKey> | undefined;
 
+export interface ResolvedAuthzenConfig {
+  pdpUrl: string;
+  subjectEndpoint: string;
+  subjectIdField?: string;
+  subjectType?: string;
+}
+
+export function resolveAuthzenConfig(event: H3Event): ResolvedAuthzenConfig {
+  const config = useRuntimeConfig(event).oauthSpaKit;
+  const pdpUrl = config.authzen?.pdpUrl ?? config.oauth.authority;
+  return {
+    pdpUrl,
+    subjectEndpoint: config.authzen?.subjectEndpoint ?? `${pdpUrl.replace(/\/+$/, "")}/v1/me/access`,
+    subjectIdField: config.authzen?.subjectIdField,
+    subjectType: config.authzen?.subjectType,
+  };
+}
+
 export async function resolveHandlersConfig(event: H3Event): Promise<OAuthHandlersConfig> {
   const config = useRuntimeConfig(event).oauthSpaKit;
   if (!config?.session?.password) {
