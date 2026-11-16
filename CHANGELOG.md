@@ -1,3 +1,10 @@
+## [2.7.1](https://github.com/ehncraft/oauth-spa-kit/compare/v2.7.0...v2.7.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **nuxt:** make useCan() SSR-safe by using useRequestFetch() ([#35](https://github.com/ehncraft/oauth-spa-kit/issues/35)) ([5a46e5e](https://github.com/ehncraft/oauth-spa-kit/commit/5a46e5ecb29e0fca858b481e6782336f24bca4fa))
+
 # [2.7.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.6.0...v2.7.0) (2026-11-16)
 
 
