@@ -1,4 +1,6 @@
+import { createDpopProof, importDpopKeyPair, type DpopKeyPair } from "@oauth-spa-kit/core";
 import { getAuthorizationHeader, type OAuthHandlersConfig } from "./handlers.js";
+import { readSession } from "./session.js";
 
 /**
  * OpenID AuthZEN Authorization API 1.0 (https://openid.net/specs/authorization-api-1_0-01.html).
@@ -135,17 +137,31 @@ async function postToPdp<TReq, TRes>(
   authzen: AuthzenClientConfig,
   path: string,
   authorizationHeader: string,
+  dpop: { keyPair: DpopKeyPair; accessToken: string } | undefined,
   body: TReq,
 ): Promise<TRes> {
   const fetchImpl = authzen.fetchImpl ?? fetch;
-  const response = await fetchImpl(pdpEndpoint(authzen.pdpUrl, path), {
-    method: "POST",
-    headers: {
+  const url = pdpEndpoint(authzen.pdpUrl, path);
+  const htu = new URL(url);
+
+  async function post(nonce?: string): Promise<Response> {
+    const headers: Record<string, string> = {
       "content-type": "application/json",
       authorization: authorizationHeader,
-    },
-    body: JSON.stringify(body),
-  });
+    };
+    if (dpop) {
+      headers.DPoP = await createDpopProof({
+        keyPair: dpop.keyPair, htm: "POST", htu: `${htu.origin}${htu.pathname}`, accessToken: dpop.accessToken, nonce,
+      });
+    }
+    return fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body) });
+  }
+
+  let response = await post();
+  if (response.status === 401 && dpop) {
+    const nonce = response.headers.get("DPoP-Nonce");
+    if (nonce) response = await post(nonce);
+  }
 
   if (!response.ok) {
     const responseBody = await response.text().catch(() => "");
@@ -156,8 +172,8 @@ async function postToPdp<TReq, TRes>(
 }
 
 /**
- * Calls the PDP with the caller's own session -- the same access token
- * `getAuthorizationHeader` would hand to any other upstream resource
+ * Calls the PDP with the caller's own session -- the same DPoP-bound access
+ * token `getAuthorizationHeader` would hand to any other upstream resource
  * server -- and returns `null` when there's no session to authorize with,
  * the same "not logged in" signal `getAuthorizationHeader` itself uses.
  */
@@ -171,7 +187,12 @@ async function callPdp<TReq, TRes>(
   const auth = await getAuthorizationHeader(request, config);
   if (!auth) return null;
 
-  const result = await postToPdp<TReq, TRes>(authzen, path, auth.header, body);
+  const session = await readSession(request, config.session);
+  const dpopKeyPair = session?.dpopKeyPair ? await importDpopKeyPair(session.dpopKeyPair) : undefined;
+  const accessToken = auth.header.slice(auth.header.indexOf(" ") + 1);
+
+  const result = await postToPdp<TReq, TRes>(
+    authzen, path, auth.header, dpopKeyPair ? { keyPair: dpopKeyPair, accessToken } : undefined, body);
   return { result, setCookie: auth.setCookie };
 }
 
@@ -240,8 +261,28 @@ export async function resolveOwnSubject(
   const auth = await getAuthorizationHeader(request, config);
   if (!auth) return null;
 
+  const session = await readSession(request, config.session);
+  const dpopKeyPair = session?.dpopKeyPair ? await importDpopKeyPair(session.dpopKeyPair) : undefined;
+  const accessToken = auth.header.slice(auth.header.indexOf(" ") + 1);
   const fetchImpl = resolver.fetchImpl ?? fetch;
-  const response = await fetchImpl(resolver.endpoint, { headers: { authorization: auth.header } });
+  const endpointUrl = new URL(resolver.endpoint);
+
+  async function get(nonce?: string): Promise<Response> {
+    const headers: Record<string, string> = { authorization: auth!.header };
+    if (dpopKeyPair) {
+      headers.DPoP = await createDpopProof({
+        keyPair: dpopKeyPair, htm: "GET", htu: `${endpointUrl.origin}${endpointUrl.pathname}`, accessToken, nonce,
+      });
+    }
+    return fetchImpl(resolver.endpoint, { headers });
+  }
+
+  let response = await get();
+  if (response.status === 401 && dpopKeyPair) {
+    const nonce = response.headers.get("DPoP-Nonce");
+    if (nonce) response = await get(nonce);
+  }
+
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new AuthzenError(`Subject resolver call to ${resolver.endpoint} failed with status ${response.status}`, response.status, body);

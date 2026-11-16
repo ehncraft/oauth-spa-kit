@@ -1,3 +1,4 @@
+import { exportDpopKeyPair, generateDpopKeyPair } from "@oauth-spa-kit/core";
 import { describe, expect, it, vi } from "vitest";
 import {
   AuthzenError,
@@ -24,6 +25,14 @@ function jsonResponse(body: unknown, status = 200): Response {
 async function sessionCookie() {
   return writeSessionHeader(
     { tokens: { accessToken: "at-1", tokenType: "DPoP", expiresAt: Date.now() + 60_000 }, user: { sub: "u1" } },
+    config.session,
+  );
+}
+
+async function dpopSessionCookie() {
+  const dpopKeyPair = await exportDpopKeyPair(await generateDpopKeyPair());
+  return writeSessionHeader(
+    { tokens: { accessToken: "at-1", tokenType: "DPoP", expiresAt: Date.now() + 60_000 }, user: { sub: "u1" }, dpopKeyPair },
     config.session,
   );
 }
@@ -230,5 +239,84 @@ describe("resolveOwnSubject", () => {
         { endpoint: "https://pdp.example/v1/me/access", fetchImpl },
       ),
     ).rejects.toThrow(AuthzenError);
+  });
+});
+
+describe("DPoP-bound sessions", () => {
+  it("evaluateAccess attaches a DPoP proof bound to the PDP URL when the session has a key pair", async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = init!.headers as Record<string, string>;
+      expect(headers.DPoP).toBeDefined();
+      expect(String(url)).toBe("https://pdp.example/access/v1/evaluation");
+      return jsonResponse({ decision: true });
+    });
+
+    await evaluateAccess(
+      requestWithCookies("https://app.example/api/whatever", await dpopSessionCookie()),
+      config,
+      { pdpUrl: "https://pdp.example", fetchImpl },
+      { subject: { type: "user", id: "u1" }, action: { name: "can_read" } },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("evaluateAccess retries once with the server's nonce on a DPoP challenge", async () => {
+    let call = 0;
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      call += 1;
+      const headers = init!.headers as Record<string, string>;
+      if (call === 1) {
+        expect(headers.DPoP).toBeDefined();
+        return new Response("nonce required", { status: 401, headers: { "DPoP-Nonce": "server-nonce-1" } });
+      }
+      expect(headers.DPoP).toBeDefined();
+      return jsonResponse({ decision: true });
+    });
+
+    const result = await evaluateAccess(
+      requestWithCookies("https://app.example/api/whatever", await dpopSessionCookie()),
+      config,
+      { pdpUrl: "https://pdp.example", fetchImpl },
+      { subject: { type: "user", id: "u1" }, action: { name: "can_read" } },
+    );
+
+    expect(result?.result).toEqual({ decision: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolveOwnSubject attaches a DPoP proof bound to the subject endpoint", async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = init!.headers as Record<string, string>;
+      expect(headers.DPoP).toBeDefined();
+      expect(String(url)).toBe("https://pdp.example/v1/me/access");
+      return jsonResponse({ membershipId: "m-1" });
+    });
+
+    const result = await resolveOwnSubject(
+      requestWithCookies("https://app.example/api/whatever", await dpopSessionCookie()),
+      config,
+      { endpoint: "https://pdp.example/v1/me/access", fetchImpl },
+    );
+
+    expect(result?.result).toEqual({ type: "membership", id: "m-1" });
+  });
+
+  it("resolveOwnSubject retries once with the server's nonce on a DPoP challenge", async () => {
+    let call = 0;
+    const fetchImpl = vi.fn(async () => {
+      call += 1;
+      if (call === 1) return new Response("nonce required", { status: 401, headers: { "DPoP-Nonce": "server-nonce-2" } });
+      return jsonResponse({ membershipId: "m-1" });
+    });
+
+    const result = await resolveOwnSubject(
+      requestWithCookies("https://app.example/api/whatever", await dpopSessionCookie()),
+      config,
+      { endpoint: "https://pdp.example/v1/me/access", fetchImpl },
+    );
+
+    expect(result?.result).toEqual({ type: "membership", id: "m-1" });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });
