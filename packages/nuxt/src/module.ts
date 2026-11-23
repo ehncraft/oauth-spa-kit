@@ -1,4 +1,4 @@
-import { addImports, addServerHandler, addServerImports, addPlugin, createResolver, defineNuxtModule } from "@nuxt/kit";
+import { addComponent, addImports, addServerHandler, addServerImports, addPlugin, createResolver, defineNuxtModule } from "@nuxt/kit";
 import { defu } from "defu";
 import type { OAuthClientConfig, JwtAlgorithm } from "@oauth-spa-kit/core";
 import type { SessionConfig } from "@oauth-spa-kit/server";
@@ -125,6 +125,7 @@ export default defineNuxtModule<ModuleOptions>({
 
     addImports({ name: "useAuth", from: resolver.resolve("./runtime/app/composables/useAuth") });
     addImports({ name: "useCan", from: resolver.resolve("./runtime/app/composables/useCan") });
+    addComponent({ name: "AuthzGuard", filePath: resolver.resolve("./runtime/app/components/AuthzGuard.vue") });
     addPlugin(resolver.resolve("./runtime/app/plugins/session.client"));
 
     // resolveHandlersConfig is what every /auth/* route above actually uses to turn the raw
