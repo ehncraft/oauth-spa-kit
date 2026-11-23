@@ -1,3 +1,10 @@
+# [2.8.0](https://github.com/ehncraft/oauth-spa-kit/compare/v2.7.2...v2.8.0) (2026-11-23)
+
+
+### Features
+
+* **nuxt:** add AuthzGuard component and distinguishable canMany() failures ([#39](https://github.com/ehncraft/oauth-spa-kit/issues/39)) ([81832f5](https://github.com/ehncraft/oauth-spa-kit/commit/81832f509b2fa0242862c480554d42dc7f5fe417))
+
 ## [2.7.2](https://github.com/ehncraft/oauth-spa-kit/compare/v2.7.1...v2.7.2) (2026-11-16)
 
 
